@@ -54,8 +54,25 @@ def main(agent=None, use_rl=False):
                 if event.key == pygame.K_f:
                     show_fps = not show_fps
                 elif event.key == pygame.K_r:
-                    # Reiniciar puck
-                    puck.reset()
+                    # Reinicio completo del juego
+                    # Reiniciar el puck con velocidad cero
+                    puck.reset(zero_velocity=True)
+                    puck.velocity = [0, 0]  # Cancelar completamente la velocidad
+                    
+                    # Reiniciar las posiciones de los mallets
+                    human_mallet.position = [WIDTH // 4, HEIGHT // 2]
+                    human_mallet.rect.center = human_mallet.position
+                    
+                    # Reiniciar el mallet de la IA según su tipo
+                    if use_rl and agent:
+                        ai_mallet.position = [WIDTH * 3 // 4, HEIGHT // 2]
+                    else:
+                        ai_mallet.position = [WIDTH * 3 // 4, HEIGHT // 2]
+                    ai_mallet.rect.center = ai_mallet.position
+                    
+                    # Reiniciar velocidades de los mallets
+                    human_mallet.velocity = [0, 0]
+                    ai_mallet.velocity = [0, 0]
         
         # Actualizar
         mouse_pos = pygame.mouse.get_pos()

@@ -61,13 +61,32 @@ class AIMallet(Mallet):
         # Movimiento simple de seguimiento, se reemplazará con RL
         if puck_pos:
             if puck_pos[0] > WIDTH // 2:  # Solo si la bola está en su mitad
-                # Movimiento con algo de retraso y aleatoriedad
-                target_x = min(max(puck_pos[0] + random.randint(-30, 30), WIDTH // 2 + self.radius), WIDTH - self.radius)
-                target_y = min(max(puck_pos[1] + random.randint(-30, 30), self.radius), HEIGHT - self.radius)
+                # Detectar si el puck está cerca de una esquina
+                is_near_corner = (
+                    (puck_pos[0] < self.radius*3 or puck_pos[0] > WIDTH - self.radius*3) and 
+                    (puck_pos[1] < self.radius*3 or puck_pos[1] > HEIGHT - self.radius*3)
+                )
                 
-                # Mover hacia el objetivo con suavidad
-                self.position[0] += (target_x - self.position[0]) * 0.1
-                self.position[1] += (target_y - self.position[1]) * 0.1
+                if is_near_corner:
+                    # Estrategia de esquina: moverse hacia el centro en lugar de hacia el puck
+                    # Calcular vector desde la esquina hacia el centro de la mesa
+                    target_x = WIDTH * 3 // 4  # Punto central de la mitad derecha
+                    target_y = HEIGHT // 2
+                    
+                    # Moverse hacia ese punto con suavidad
+                    self.position[0] += (target_x - self.position[0]) * 0.15
+                    self.position[1] += (target_y - self.position[1]) * 0.15
+                else:
+                    # Comportamiento normal con algo de inteligencia añadida
+                    # Intentar interceptar el puck basado en su trayectoria, no solo su posición
+                    # Calcular punto de interceptación estimado
+                    intercept_x = min(max(puck_pos[0] + random.randint(-20, 20), WIDTH // 2 + self.radius), WIDTH - self.radius)
+                    intercept_y = min(max(puck_pos[1] + random.randint(-20, 20), self.radius), HEIGHT - self.radius)
+                    
+                    # Mover hacia el punto de interceptación con suavidad
+                    self.position[0] += (intercept_x - self.position[0]) * 0.1
+                    self.position[1] += (intercept_y - self.position[1]) * 0.1
+                
                 self.rect.center = self.position
                 
                 # Calcular velocidad basada en el cambio de posición
@@ -75,7 +94,6 @@ class AIMallet(Mallet):
                     self.position[0] - self.prev_position[0],
                     self.position[1] - self.prev_position[1]
                 ]
-
 class Puck(pygame.sprite.Sprite):
     """Clase para el disco (puck)"""
     
@@ -174,20 +192,31 @@ class Puck(pygame.sprite.Sprite):
             
             
         
-    def reset(self, scorer=None):
-        """Resetea el puck al centro con una velocidad aleatoria"""
+    def reset(self, scorer=None, zero_velocity=False):
+        """
+        Resetea el puck al centro con una velocidad determinada
+        
+        Args:
+            scorer: Quién anotó el último gol ('player', 'ai', o None)
+            zero_velocity: Si es True, establece la velocidad a cero
+        """
         self.position = [WIDTH // 2, HEIGHT // 2]
-        # Dirección aleatoria, pero ligeramente hacia el que no anotó
-        if scorer == "player":
-            self.velocity = [random.uniform(-3, -1), random.uniform(-2, 2)]
-        elif scorer == "ai":
-            self.velocity = [random.uniform(1, 3), random.uniform(-2, 2)]
+        
+        if zero_velocity:
+            self.velocity = [0, 0]
         else:
-            self.velocity = [random.choice([-2, 2]), random.choice([-2, 2])]
+            # Dirección aleatoria, pero ligeramente hacia el que no anotó
+            if scorer == "player":
+                self.velocity = [random.uniform(-3, -1), random.uniform(-2, 2)]
+            elif scorer == "ai":
+                self.velocity = [random.uniform(1, 3), random.uniform(-2, 2)]
+            else:
+                self.velocity = [random.choice([-2, 2]), random.choice([-2, 2])]
+        
         self.rect.center = self.position
         
     def check_mallet_collision(self, mallet):
-        """Verificación avanzada de colisión con un mallet"""
+        """Verificación avanzada de colisión con un mallet, con prevención de atravesar paredes"""
         # Verificar si la trayectoria del puck intersecta con el mallet
         trajectory_intersects = line_circle_intersection(
             self.prev_position, 
@@ -210,9 +239,30 @@ class Puck(pygame.sprite.Sprite):
                 dx /= length
                 dy /= length
                 
+                # Verificar si estamos cerca de un borde para ajustar el vector de rebote
+                near_left = self.position[0] - self.radius < 20
+                near_right = self.position[0] + self.radius > WIDTH - 20
+                near_top = self.position[1] - self.radius < 20
+                near_bottom = self.position[1] + self.radius > HEIGHT - 20
+                
+                # Modificar el vector de rebote para evitar empujar contra los bordes
+                if near_left:
+                    dx = abs(dx)  # Forzar componente x positivo (hacia la derecha)
+                elif near_right:
+                    dx = -abs(dx)  # Forzar componente x negativo (hacia la izquierda)
+                    
+                if near_top:
+                    dy = abs(dy)  # Forzar componente y positivo (hacia abajo)
+                elif near_bottom:
+                    dy = -abs(dy)  # Forzar componente y negativo (hacia arriba)
+                
                 # Reposicionar el puck fuera del mallet
                 self.position[0] = mallet.position[0] + (mallet.radius + self.radius + 1) * dx
                 self.position[1] = mallet.position[1] + (mallet.radius + self.radius + 1) * dy
+                
+                # Garantía absoluta de que el puck no salga del área jugable
+                self.position[0] = max(self.radius, min(self.position[0], WIDTH - self.radius))
+                self.position[1] = max(self.radius, min(self.position[1], HEIGHT - self.radius))
                 
                 # Transferir parte de la velocidad del mallet al puck
                 mallet_speed_contribution = vector_length(mallet.velocity) * 0.5
