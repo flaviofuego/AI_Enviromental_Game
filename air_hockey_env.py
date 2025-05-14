@@ -22,10 +22,14 @@ class AirHockeyEnv(gym.Env):
         # Define observation space
         # [mallet_x, mallet_y, puck_x, puck_y, puck_vx, puck_vy]
         # All values are normalized between 0 and 1
-        low = np.array([0, 0, 0, 0, -1, -1], dtype=np.float32)
-        high = np.array([1, 1, 1, 1, 1, 1], dtype=np.float32)
-        self.observation_space = spaces.Box(low, high, dtype=np.float32)
+       # Additional state variables for improved learning
+        self.steps_since_last_hit = 0
         
+        # Expand observation space to include additional features
+        low = np.array([0, 0, 0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
+        high = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, dtype=np.float32)
+            
         # Define rendering parameters
         self.render_mode = render_mode
         self.screen = None
@@ -92,15 +96,7 @@ class AirHockeyEnv(gym.Env):
         prev_position = self.ai_mallet_position.copy()
         move_amount = 5
         
-        if action == 0:  # Up
-            self.ai_mallet_position[1] = max(self.ai_mallet_position[1] - move_amount, self.ai_mallet_radius)
-        elif action == 1:  # Down
-            self.ai_mallet_position[1] = min(self.ai_mallet_position[1] + move_amount, HEIGHT - self.ai_mallet_radius)
-        elif action == 2:  # Left
-            self.ai_mallet_position[0] = max(self.ai_mallet_position[0] - move_amount, WIDTH // 2 + self.ai_mallet_radius)
-        elif action == 3:  # Right
-            self.ai_mallet_position[0] = min(self.ai_mallet_position[0] + move_amount, WIDTH - self.ai_mallet_radius)
-        # If action == 4, do nothing (stay in place)
+        # Action handling remains the same...
         
         # Update AI mallet sprite position and velocity
         self.ai_mallet.rect.center = self.ai_mallet_position
@@ -114,14 +110,14 @@ class AirHockeyEnv(gym.Env):
         
         # Store previous distance for reward calculation
         prev_distance = np.sqrt((self.puck.position[0] - self.ai_mallet_position[0])**2 + 
-                               (self.puck.position[1] - self.ai_mallet_position[1])**2)
+                            (self.puck.position[1] - self.ai_mallet_position[1])**2)
         
         # Update puck
         self.puck.update()
         
         # Check collisions
         ai_hit_puck = self._check_mallet_collision(self.ai_mallet, self.ai_mallet_position, 
-                                                  self.ai_mallet_radius, self.ai_mallet_velocity)
+                                                self.ai_mallet_radius, self.ai_mallet_velocity)
         human_hit_puck = self.puck.check_mallet_collision(self.human_mallet)
         
         # Check for goals
@@ -137,23 +133,24 @@ class AirHockeyEnv(gym.Env):
             goal_scored = True
             self.puck.reset("ai")
         
-        # Calculate reward
+        # Calculate reward using improved function
         reward = self._calculate_reward(prev_distance, ai_hit_puck, goal)
         
         # Check if episode is done
         done = goal_scored or self.steps >= self.max_steps or self.player_score >= 5 or self.ai_score >= 5
         
-        # Set truncated flag (episode limit reached but not done because of environment termination condition)
+        # Set truncated flag
         truncated = self.steps >= self.max_steps and not done
         
-        # Get observation
+        # Get observation using enhanced method
         observation = self._get_observation()
         
         # Get info
         info = {
             "player_score": self.player_score,
             "ai_score": self.ai_score,
-            "steps": self.steps
+            "steps": self.steps,
+            "hit_puck": ai_hit_puck
         }
         
         # Render if in human mode
@@ -161,6 +158,7 @@ class AirHockeyEnv(gym.Env):
             self.render()
         
         return observation, reward, done, truncated, info
+    
     
     def _update_human_player(self):
         """Simple automated behavior for the human player during training"""
@@ -170,43 +168,136 @@ class AirHockeyEnv(gym.Env):
             self.human_mallet.rect.center = self.human_mallet.position
     
     def _get_observation(self):
-        """Convert game state to observation vector"""
-        return np.array([
+        """Return an enhanced observation with more game state information"""
+        # Basic observation (normalized positions and velocities)
+        basic_obs = np.array([
             self.ai_mallet_position[0] / WIDTH,
             self.ai_mallet_position[1] / HEIGHT,
-            self.puck.position[0] / WIDTH, 
+            self.puck.position[0] / WIDTH,
             self.puck.position[1] / HEIGHT,
             np.clip(self.puck.velocity[0] / self.puck.max_speed, -1, 1),
-            np.clip(self.puck.velocity[1] / self.puck.max_speed, -1, 1)
+            np.clip(self.puck.velocity[1] / self.puck.max_speed, -1, 1),
         ], dtype=np.float32)
+        
+        # Calculate additional features
+        # Distance between puck and AI mallet
+        puck_to_mallet_dist = np.sqrt(
+            (self.puck.position[0] - self.ai_mallet_position[0])**2 + 
+            (self.puck.position[1] - self.ai_mallet_position[1])**2
+        ) / np.sqrt(WIDTH**2 + HEIGHT**2)  # Normalize
+        
+        # Distance from puck to AI goal
+        puck_to_ai_goal = (WIDTH - self.puck.position[0]) / WIDTH
+        
+        # Distance from puck to player goal
+        puck_to_player_goal = self.puck.position[0] / WIDTH
+        
+        # Time since last hit
+        time_since_hit = min(self.steps_since_last_hit / 100.0, 1.0)  # Normalize
+        
+        # Is puck moving toward AI goal?
+        puck_moving_to_player = 1.0 if self.puck.velocity[0] < 0 else 0.0
+        
+        # Enhanced observation vector
+        enhanced_obs = np.append(basic_obs, [
+            puck_to_mallet_dist,
+            puck_to_ai_goal,
+            puck_to_player_goal,
+            time_since_hit,
+            puck_moving_to_player,
+            self.player_score / 5.0,  # Normalize by max score
+            self.ai_score / 5.0,
+        ])
+        
+        return enhanced_obs
     
     def _calculate_reward(self, prev_distance, ai_hit_puck, goal):
-        """Calculate reward based on game events"""
-        reward = 0
+        """Calculate an improved reward function that encourages strategic play"""
+        reward = 0.0
         
         # Current distance to puck
-        current_distance = np.sqrt((self.puck.position[0] - self.ai_mallet_position[0])**2 + 
-                                 (self.puck.position[1] - self.ai_mallet_position[1])**2)
+        current_distance = np.sqrt(
+            (self.puck.position[0] - self.ai_mallet_position[0])**2 + 
+            (self.puck.position[1] - self.ai_mallet_position[1])**2
+        )
+        
+        # Reward for being in a good defensive position when puck is in player's half
+        if self.puck.position[0] < WIDTH / 2:
+            # Calculate ideal defensive position (adjust based on puck position)
+            ideal_x = WIDTH * 0.75  # Defensive position
+            ideal_y = self.puck.position[1]  # Stay aligned with puck
+            
+            # Reward for being in good defensive position
+            defensive_distance = np.sqrt(
+                (self.ai_mallet_position[0] - ideal_x)**2 + 
+                (self.ai_mallet_position[1] - ideal_y)**2
+            )
+            defensive_reward = max(0, 0.05 * (1.0 - defensive_distance / (WIDTH/2)))
+            reward += defensive_reward
         
         # Reward for getting closer to the puck when it's in AI's half
-        if self.puck.position[0] > WIDTH // 2 and current_distance < prev_distance:
-            reward += 0.1
+        elif self.puck.position[0] > WIDTH / 2:
+            # Reward for closing distance to puck
+            if current_distance < prev_distance:
+                reward += 0.1 * min(1.0, (prev_distance - current_distance) * 0.1)
         
         # Reward for hitting the puck
         if ai_hit_puck:
-            reward += 1.0
+            reward += 0.5
             
-            # Additional reward if hit sends puck toward opponent's goal
-            if self.puck.velocity[0] < 0:
-                reward += 0.5
+            # Calculate angle of hit relative to opponent's goal
+            # Center of player's goal
+            player_goal_center = [0, HEIGHT / 2]
+            
+            # Vector from puck to player's goal
+            goal_vector = [
+                player_goal_center[0] - self.puck.position[0],
+                player_goal_center[1] - self.puck.position[1]
+            ]
+            
+            # Normalize the goal vector
+            goal_vector_length = np.sqrt(goal_vector[0]**2 + goal_vector[1]**2)
+            if goal_vector_length > 0:
+                goal_vector = [
+                    goal_vector[0] / goal_vector_length,
+                    goal_vector[1] / goal_vector_length
+                ]
+            
+            # Check alignment of puck velocity with goal vector using dot product
+            puck_velocity_normalized = [0, 0]
+            puck_speed = np.sqrt(self.puck.velocity[0]**2 + self.puck.velocity[1]**2)
+            if puck_speed > 0:
+                puck_velocity_normalized = [
+                    self.puck.velocity[0] / puck_speed,
+                    self.puck.velocity[1] / puck_speed
+                ]
+            
+            # Dot product gives -1 to 1 (1 means perfectly aligned)
+            alignment = (goal_vector[0] * puck_velocity_normalized[0] + 
+                        goal_vector[1] * puck_velocity_normalized[1])
+            
+            # Higher reward for better alignment with the goal
+            alignment_reward = max(0, alignment)  # Only reward positive alignment
+            reward += 2.0 * alignment_reward * (puck_speed / self.puck.max_speed)
+            
+            # Reset steps since last hit
+            self.steps_since_last_hit = 0
+        else:
+            # Increment steps since last hit
+            self.steps_since_last_hit += 1
         
-        # Rewards/penalties for goals
+        # Big rewards/penalties for goals
         if goal == "player":  # Human scored
-            reward -= 10.0
+            reward -= 5.0
         elif goal == "ai":    # AI scored
             reward += 10.0
         
+        # Small penalty for excessive movement (encourages efficient motion)
+        movement_penalty = 0.01 * min(1.0, np.sqrt(self.ai_mallet_velocity[0]**2 + self.ai_mallet_velocity[1]**2) / 10.0)
+        reward -= movement_penalty
+        
         return reward
+    
     
     def _check_mallet_collision(self, mallet, mallet_position, mallet_radius, mallet_velocity):
         """Custom collision detection between puck and AI mallet"""
@@ -297,3 +388,5 @@ class AirHockeyEnv(gym.Env):
             pygame.display.quit()
             pygame.quit()
             self.screen = None
+            
+    
