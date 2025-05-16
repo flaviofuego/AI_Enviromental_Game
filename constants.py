@@ -2,7 +2,7 @@
 
 # Dimensiones
 WIDTH, HEIGHT = 800, 500
-FPS = 60
+FPS = 300
 
 # Colores
 WHITE = (255, 255, 255)

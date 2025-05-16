@@ -61,6 +61,7 @@ def train_agent(total_timesteps=500000, eval_freq=10000, model_name="air_hockey_
     model = PPO(
         "MlpPolicy",
         env,
+        device="cpu",
         learning_rate=3e-4,  # Slightly lower learning rate for more stability
         n_steps=2048,        # Collect more steps per update for better learning
         batch_size=64,
