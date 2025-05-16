@@ -8,12 +8,16 @@ from constants import *
 from sprites import Puck, HumanMallet
 from table import Table
 
+   
+    
 class AirHockeyEnv(gym.Env):
     """Custom Environment for Air Hockey game that follows gym interface"""
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
     
-    def __init__(self, render_mode=None):
+    def __init__(self, render_mode=None, play_mode=False):
         super(AirHockeyEnv, self).__init__()
+        
+        self.play_mode = play_mode
         
         # Define action space
         # 0: Up, 1: Down, 2: Left, 3: Right, 4: Stay
@@ -47,9 +51,25 @@ class AirHockeyEnv(gym.Env):
         self.ai_score = 0
         self.steps = 0
         self.max_steps = 1000
-        
+        self.opponent_skill = 0.3  # Starting skill level
         # Initialize the game
         self.reset()
+    # Then add this method to periodically increase difficulty
+    def increase_opponent_difficulty(self, current_reward):
+        """Increase opponent difficulty based on AI performance"""
+        # Initialize these attributes if they don't exist
+        if not hasattr(self, "opponent_skill"):
+            self.opponent_skill = 0.3  # Starting skill level
+        if not hasattr(self, "last_average_reward"):
+            self.last_average_reward = -float('inf')
+            
+        # Only increase difficulty if performance has improved
+        if current_reward > self.last_average_reward + 0.5:
+            self.opponent_skill = min(0.9, self.opponent_skill + 0.1)
+            self.last_average_reward = current_reward
+            print(f"Increasing opponent skill to {self.opponent_skill:.1f}")
+        
+        return self.opponent_skill
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -96,7 +116,15 @@ class AirHockeyEnv(gym.Env):
         prev_position = self.ai_mallet_position.copy()
         move_amount = 5
         
-        # Action handling remains the same...
+        # Execute action (same as before)...
+        if action == 0:  # Up
+            self.ai_mallet_position[1] = max(self.ai_mallet_position[1] - move_amount, self.ai_mallet_radius)
+        elif action == 1:  # Down
+            self.ai_mallet_position[1] = min(self.ai_mallet_position[1] + move_amount, HEIGHT - self.ai_mallet_radius)
+        elif action == 2:  # Left
+            self.ai_mallet_position[0] = max(self.ai_mallet_position[0] - move_amount, WIDTH // 2 + self.ai_mallet_radius)
+        elif action == 3:  # Right
+            self.ai_mallet_position[0] = min(self.ai_mallet_position[0] + move_amount, WIDTH - self.ai_mallet_radius)
         
         # Update AI mallet sprite position and velocity
         self.ai_mallet.rect.center = self.ai_mallet_position
@@ -105,8 +133,19 @@ class AirHockeyEnv(gym.Env):
             self.ai_mallet_position[1] - prev_position[1]
         ]
         
-        # Update human player (simple AI for training)
-        self._update_human_player()
+        # Only update simulated human player in training mode, not play mode
+        if not self.play_mode:
+            self._update_human_player()
+        # Action handling remains the same...
+        
+        # # Update AI mallet sprite position and velocity
+        # self.ai_mallet.rect.center = self.ai_mallet_position
+        # self.ai_mallet_velocity = [
+        #     self.ai_mallet_position[0] - prev_position[0],
+        #     self.ai_mallet_position[1] - prev_position[1]
+        # ]
+        
+        
         
         # Store previous distance for reward calculation
         prev_distance = np.sqrt((self.puck.position[0] - self.ai_mallet_position[0])**2 + 
@@ -159,14 +198,129 @@ class AirHockeyEnv(gym.Env):
         
         return observation, reward, done, truncated, info
     
-    
+    def update_human_player_manually(self, mouse_pos):
+        """Allow manual control of the human player mallet during play mode"""
+        if not self.play_mode:
+            return
+            
+        # Calculate target position within bounds
+        target_x = min(max(mouse_pos[0], self.human_mallet.radius), WIDTH // 2 - self.human_mallet.radius)
+        target_y = min(max(mouse_pos[1], self.human_mallet.radius), HEIGHT - self.human_mallet.radius)
+        
+        # Update position
+        self.human_mallet.position = [target_x, target_y]
+        self.human_mallet.rect.center = self.human_mallet.position
+        
+        # Calculate velocity for physics
+        self.human_mallet.velocity = [
+            self.human_mallet.position[0] - self.human_mallet.prev_position[0],
+            self.human_mallet.position[1] - self.human_mallet.prev_position[1]
+        ]
+        
+        # Update previous position
+        self.human_mallet.prev_position = self.human_mallet.position.copy()
     def _update_human_player(self):
-        """Simple automated behavior for the human player during training"""
+        """Advanced behavior for the simulated human player during training"""
+        # Define skill parameters (can be adjusted for curriculum learning)
+        if not hasattr(self, "opponent_skill"):
+            self.opponent_skill = 0.3  # Default starting value
+        
+        prediction_ability = 0.3 + (0.7 * self.opponent_skill)
+        reaction_speed = 0.05 + (0.2 * self.opponent_skill)
+        accuracy = 0.5 + (0.5 * self.opponent_skill)
+        aggression = 0.3 + (0.6 * self.opponent_skill)
+        # prediction_ability = 0.7  # How well it predicts puck trajectory (0-1)
+        # reaction_speed = 0.15     # How quickly it moves to target positions (higher = faster)
+        # accuracy = 0.85           # How accurately it aims at the goal (0-1)
+        # aggression = 0.6          # How aggressively it pursues the puck (0-1)
+        
+        # Puck is on human's side - OFFENSIVE MODE
         if self.puck.position[0] < WIDTH // 2:
-            target_y = self.puck.position[1] + np.random.randint(-30, 30)
-            self.human_mallet.position[1] += (target_y - self.human_mallet.position[1]) * 0.1
-            self.human_mallet.rect.center = self.human_mallet.position
-    
+            # Predict where the puck will be
+            predicted_y = self.puck.position[1]
+            
+            # If puck is moving, predict its path
+            if abs(self.puck.velocity[1]) > 0.5:
+                # Simple linear prediction with some error based on skill
+                time_to_intercept = (self.human_mallet.position[0] - self.puck.position[0]) / max(1.0, abs(self.puck.velocity[0]))
+                perfect_prediction = self.puck.position[1] + self.puck.velocity[1] * time_to_intercept
+                prediction_error = (1.0 - prediction_ability) * np.random.normal(0, HEIGHT * 0.2)
+                predicted_y = perfect_prediction + prediction_error
+            
+            # Decide whether to go for the puck or position strategically
+            distance_to_puck = np.sqrt((self.puck.position[0] - self.human_mallet.position[0])**2 + 
+                                (self.puck.position[1] - self.human_mallet.position[1])**2)
+            
+            if distance_to_puck < 150 * aggression:  # Go for the hit if close enough
+                target_x = min(self.puck.position[0], WIDTH // 2 - self.human_mallet.radius)
+                target_y = predicted_y
+                
+                # If close to puck, aim toward AI's goal with some inaccuracy
+                if distance_to_puck < 50:
+                    # Perfect aim would be toward middle of AI's goal
+                    perfect_angle = np.arctan2(HEIGHT/2 - self.puck.position[1], 
+                                            WIDTH - self.puck.position[0])
+                    # Add some inaccuracy based on skill
+                    angle_error = (1.0 - accuracy) * np.random.normal(0, 0.5)
+                    aim_angle = perfect_angle + angle_error
+                    
+                    # Position mallet to hit at this angle
+                    hit_offset = 30 * np.sin(aim_angle)  # Perpendicular offset for hitting
+                    target_y = self.puck.position[1] + hit_offset
+            else:
+                # Position defensively when puck is far
+                target_x = WIDTH * 0.25  # Stay back a bit
+                target_y = HEIGHT / 2    # Cover the middle with slight tracking
+                if self.puck.position[1] < HEIGHT * 0.3:
+                    target_y = HEIGHT * 0.3
+                elif self.puck.position[1] > HEIGHT * 0.7:
+                    target_y = HEIGHT * 0.7
+        
+        # Puck is on AI's side - DEFENSIVE MODE
+        else:
+            # Position mallet to anticipate return
+            puck_trajectory = self.puck.velocity[1] / max(0.1, abs(self.puck.velocity[0]))
+            potential_y = self.puck.position[1] + puck_trajectory * (WIDTH // 2 - self.puck.position[0])
+            
+            # Defend based on prediction but stay within reasonable bounds
+            target_x = WIDTH * 0.15  # Stay close to our goal
+            target_y = np.clip(potential_y, HEIGHT * 0.2, HEIGHT * 0.8)
+            
+            # Add some jitter to defensive movement to be less predictable
+            target_y += np.random.normal(0, HEIGHT * 0.05)
+        
+        # Calculate movement using current position and target
+        # Limit movement to reflect human capabilities
+        max_speed = 15.0  # Maximum speed the simulated human can move per frame
+        
+        # Calculate desired movement
+        move_x = (target_x - self.human_mallet.position[0]) * reaction_speed
+        move_y = (target_y - self.human_mallet.position[1]) * reaction_speed
+        
+        # Limit to maximum speed
+        move_magnitude = np.sqrt(move_x**2 + move_y**2)
+        if move_magnitude > max_speed:
+            scale_factor = max_speed / move_magnitude
+            move_x *= scale_factor
+            move_y *= scale_factor
+        
+        # Update mallet position
+        new_x = np.clip(self.human_mallet.position[0] + move_x, 
+                    self.human_mallet.radius, 
+                    WIDTH // 2 - self.human_mallet.radius)
+        new_y = np.clip(self.human_mallet.position[1] + move_y, 
+                    self.human_mallet.radius, 
+                    HEIGHT - self.human_mallet.radius)
+        
+        self.human_mallet.position[0] = new_x
+        self.human_mallet.position[1] = new_y
+        self.human_mallet.rect.center = self.human_mallet.position
+        
+        # Update velocity for physics effects
+        self.human_mallet.velocity = [
+            move_x,
+            move_y
+        ]
     def _get_observation(self):
         """Return an enhanced observation with more game state information"""
         # Basic observation (normalized positions and velocities)
@@ -221,22 +375,22 @@ class AirHockeyEnv(gym.Env):
             (self.puck.position[1] - self.ai_mallet_position[1])**2
         )
         
-        # Reward for being in a good defensive position when puck is in player's half
-        if self.puck.position[0] < WIDTH / 2:
-            # Calculate ideal defensive position (adjust based on puck position)
-            ideal_x = WIDTH * 0.75  # Defensive position
-            ideal_y = self.puck.position[1]  # Stay aligned with puck
+        # # Reward for being in a good defensive position when puck is in player's half
+        # if self.puck.position[0] < WIDTH / 2:
+        #     # Calculate ideal defensive position (adjust based on puck position)
+        #     ideal_x = WIDTH * 0.75  # Defensive position
+        #     ideal_y = self.puck.position[1]  # Stay aligned with puck
             
-            # Reward for being in good defensive position
-            defensive_distance = np.sqrt(
-                (self.ai_mallet_position[0] - ideal_x)**2 + 
-                (self.ai_mallet_position[1] - ideal_y)**2
-            )
-            defensive_reward = max(0, 0.05 * (1.0 - defensive_distance / (WIDTH/2)))
-            reward += defensive_reward
+        #     # Reward for being in good defensive position
+        #     defensive_distance = np.sqrt(
+        #         (self.ai_mallet_position[0] - ideal_x)**2 + 
+        #         (self.ai_mallet_position[1] - ideal_y)**2
+        #     )
+        #     defensive_reward = max(0, 0.05 * (1.0 - defensive_distance / (WIDTH/2)))
+        #     reward += defensive_reward
         
         # Reward for getting closer to the puck when it's in AI's half
-        elif self.puck.position[0] > WIDTH / 2:
+        if self.puck.position[0] > WIDTH / 2:
             # Reward for closing distance to puck
             if current_distance < prev_distance:
                 reward += 0.1 * min(1.0, (prev_distance - current_distance) * 0.1)

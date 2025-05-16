@@ -7,10 +7,63 @@ import pygame
 import torch
 from stable_baselines3 import PPO  # Switching from DQN to PPO
 from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
+from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback,BaseCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
+torch.set_num_threads(6)  # Usa 4 threads CPU (ajusta según tu procesador)
+torch.cuda.is_available = lambda: False
+
+class DifficultyProgressionCallback(BaseCallback):
+    """
+    Callback for adjusting opponent difficulty based on agent performance.
+    """
+    def __init__(self, eval_env, eval_freq=10000, verbose=1):
+        super().__init__(verbose)
+        self.eval_env = eval_env  # Environment used for evaluation
+        self.eval_freq = eval_freq  # How often to evaluate and adjust difficulty
+        self.best_mean_reward = -float('inf')
+        
+    def _on_step(self):
+        # Check if it's time to evaluate and adjust difficulty
+        if self.n_calls % self.eval_freq == 0:
+            # Evaluate current policy
+            rewards = []
+            obs, _ = self.eval_env.reset()
+            
+            # Run a few episodes to assess performance
+            for _ in range(5):  # Evaluate on 5 episodes
+                done = False
+                episode_reward = 0
+                
+                while not done:
+                    action, _ = self.model.predict(obs, deterministic=True)
+                    obs, reward, done, truncated, _ = self.eval_env.step(action)
+                    done = done or truncated
+                    episode_reward += reward
+                
+                rewards.append(episode_reward)
+                obs, _ = self.eval_env.reset()
+            
+            mean_reward = sum(rewards) / len(rewards)
+            
+            # Only increase difficulty if performance has improved significantly
+            if mean_reward > self.best_mean_reward + 0.5:
+                self.best_mean_reward = mean_reward
+                
+                # Access the unwrapped environment to call our method
+                # This is the key fix - we need to get to the actual AirHockeyEnv instance
+                unwrapped_env = self.eval_env.unwrapped
+                unwrapped_env.increase_opponent_difficulty(mean_reward)
+                
+                if self.verbose > 0:
+                    print(f"Step {self.n_calls}: Mean reward: {mean_reward:.2f}, increasing opponent difficulty")
+            
+            elif self.verbose > 0:
+                print(f"Step {self.n_calls}: Mean reward: {mean_reward:.2f}, maintaining opponent difficulty")
+                
+        return True  # Continue training
+    
 # Import your custom environment
 from air_hockey_env import AirHockeyEnv
 
@@ -57,6 +110,10 @@ def train_agent(total_timesteps=500000, eval_freq=10000, model_name="air_hockey_
         render=False
     )
     
+    # Initialize the difficulty progression callback
+    difficulty_callback = DifficultyProgressionCallback(eval_env, eval_freq=25000, verbose=1)
+
+        
     # Initialize the PPO agent with improved hyperparameters
     model = PPO(
         "MlpPolicy",
@@ -84,7 +141,7 @@ def train_agent(total_timesteps=500000, eval_freq=10000, model_name="air_hockey_
     
     model.learn(
         total_timesteps=total_timesteps,
-        callback=[checkpoint_callback, eval_callback],
+        callback=[checkpoint_callback, eval_callback, difficulty_callback],
         progress_bar=True
     )
     
@@ -108,6 +165,7 @@ def train_agent(total_timesteps=500000, eval_freq=10000, model_name="air_hockey_
     return model
 
 
+
 def play_with_trained_model(model_name="models/air_hockey_ppo_final"):
     """Load a trained model and play in human render mode"""
     
@@ -116,10 +174,7 @@ def play_with_trained_model(model_name="models/air_hockey_ppo_final"):
     pygame.display.init()
     
     # Create the environment with human rendering
-    env = AirHockeyEnv(render_mode="human")
-    
-    # Render once to ensure display is created
-    env.render()
+    env = AirHockeyEnv(render_mode="human", play_mode=True)  # Add a play_mode flag
     
     try:
         # Load the trained model
@@ -133,32 +188,45 @@ def play_with_trained_model(model_name="models/air_hockey_ppo_final"):
     
     # Play a few episodes
     obs, info = env.reset()
-    done = False
-    truncated = False
     total_reward = 0
+    clock = pygame.time.Clock()
     
     # Game loop
     running = True
     while running:
-        # Get action from model with deterministic policy (no exploration)
+        # Handle events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+        
+        # Get mouse position for human player
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # Update human mallet based on mouse (left side)
+        env.update_human_player_manually(mouse_pos)
+        
+        # Get action from model for AI mallet (right side)
         action, _states = model.predict(obs, deterministic=True)
         
         # Take step in environment
         obs, reward, done, truncated, info = env.step(action)
         total_reward += reward
         
-        # Render and check if window was closed
-        running = env.render()
+        # Render game
+        env.render()
+        
+        # Maintain frame rate
+        clock.tick(60)
         
         # Reset if episode is done
         if done or truncated:
             print(f"Episode finished with reward {total_reward}")
             total_reward = 0
             obs, info = env.reset()
-            
+    
     # Clean up pygame
     env.close()
-
+    
 if __name__ == "__main__":
     print("Air Hockey Reinforcement Learning - Improved Training")
     print("\nOptions:")
