@@ -2,7 +2,7 @@
 
 # Dimensiones
 WIDTH, HEIGHT = 800, 500
-FPS = 60
+FPS = 300
 
 # Colores
 WHITE = (255, 255, 255)
@@ -15,7 +15,7 @@ NEON_GREEN = (60, 255, 60)
 NEON_BLUE = (60, 60, 255)
 
 # Parámetros de física
-FRICTION = 0.99  # Fricción del puck en la superficie
+FRICTION = 0.999  # Fricción del puck en la superficie
 MAX_PUCK_SPEED = 10  # Velocidad máxima del puck
 COLLISION_ELASTICITY = 0.9  # Elasticidad en las colisiones (1.0 = perfectamente elástico)
 
