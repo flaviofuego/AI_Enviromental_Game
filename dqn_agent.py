@@ -7,6 +7,8 @@ from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
 
+from constants import NEON_GREEN, WIDTH, HEIGHT  # Añade esta línea
+
 class DQNAgent:
     """Agente de aprendizaje por refuerzo Deep Q-Network"""
     
@@ -51,6 +53,10 @@ class DQNAgent:
             
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
+            # Verificar que state y next_state no sean None
+            if state is None or next_state is None:
+                continue
+                
             target = reward
             if not done:
                 target = reward + self.gamma * np.amax(self.model.predict(next_state, verbose=0)[0])
@@ -85,7 +91,7 @@ class RLAIMallet(pygame.sprite.Sprite):
         self.position = [WIDTH * 3 // 4, HEIGHT // 2]
         self.prev_position = self.position.copy()
         self.agent = agent
-        self.state = None
+        self.state = np.zeros((1, agent.state_size))
         
     def get_state(self, puck):
         """Obtiene el vector de estado para el agente RL"""

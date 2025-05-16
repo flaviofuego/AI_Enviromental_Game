@@ -32,6 +32,14 @@ def train_agent(agent, episodes=500, batch_size=32, model_name="air_hockey_model
     # Bucle de entrenamiento
     for episode in range(episodes):
         # Reiniciar el juego
+        pygame.init()
+        # O si prefieres inicializar solo el subsistema de fuentes:
+        # pygame.font.init()
+        
+        # Crear objetos
+        table = Table()
+        puck = Puck()
+    
         puck.reset()
         ai_mallet.position = [WIDTH * 3 // 4, HEIGHT // 2]
         ai_mallet.rect.center = ai_mallet.position
