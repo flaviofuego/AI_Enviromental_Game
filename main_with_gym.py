@@ -71,8 +71,8 @@ def main(use_rl=False):
         try:
             print("Loading RL model...")
             # Check both model file naming patterns
-            if os.path.exists("air_hockey_ppo_final.zip"):
-                model = load_optimized_model("air_hockey_ppo_final")
+            if os.path.exists("models/air_hockey_ppo_final.zip"):
+                model = load_optimized_model("models/air_hockey_ppo_final.zip")
             elif os.path.exists("air_hockey_dqn.zip"):
                 model = load_optimized_model("air_hockey_dqn")
             else:
@@ -85,7 +85,7 @@ def main(use_rl=False):
             if model:
                 print("Model loaded successfully!")
                 # Pre-warm the model with a dummy prediction to initialize tensors
-                dummy_obs = np.zeros((6,), dtype=np.float32)
+                dummy_obs = np.zeros((13,), dtype=np.float32)
                 model.predict(dummy_obs, deterministic=True)
             else:
                 print("No model file found")
@@ -106,7 +106,7 @@ def main(use_rl=False):
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
-    prediction_interval = 100  # ms between predictions (higher value = better performance)
+    prediction_interval = 50  # ms between predictions (higher value = better performance)
     
     # Frame skip for AI updates
     frame_count = 0
@@ -171,18 +171,7 @@ def main(use_rl=False):
             # Make predictions at specified intervals for better performance
             if current_time - last_prediction_time > prediction_interval:
                   # Create ONLY the basic 6-dimensional observation vector that matches the model's expectations
-                observation = np.array([
-                    ai_mallet.position[0] / WIDTH,
-                    ai_mallet.position[1] / HEIGHT,
-                    puck.position[0] / WIDTH,
-                    puck.position[1] / HEIGHT,
-                    np.clip(puck.velocity[0] / puck.max_speed, -1, 1),
-                    np.clip(puck.velocity[1] / puck.max_speed, -1, 1)
-                ], dtype=np.float32)
-    
-                # Make prediction with error handling
-                # # Create the basic observation vector
-                # basic_obs = np.array([
+                # observation = np.array([
                 #     ai_mallet.position[0] / WIDTH,
                 #     ai_mallet.position[1] / HEIGHT,
                 #     puck.position[0] / WIDTH,
@@ -190,28 +179,39 @@ def main(use_rl=False):
                 #     np.clip(puck.velocity[0] / puck.max_speed, -1, 1),
                 #     np.clip(puck.velocity[1] / puck.max_speed, -1, 1)
                 # ], dtype=np.float32)
+    
+                #Make prediction with error handling
+                # Create the basic observation vector
+                basic_obs = np.array([
+                    ai_mallet.position[0] / WIDTH,
+                    ai_mallet.position[1] / HEIGHT,
+                    puck.position[0] / WIDTH,
+                    puck.position[1] / HEIGHT,
+                    np.clip(puck.velocity[0] / puck.max_speed, -1, 1),
+                    np.clip(puck.velocity[1] / puck.max_speed, -1, 1)
+                ], dtype=np.float32)
                 
-                # # Calculate the additional features needed
-                # puck_to_mallet_dist = np.sqrt(
-                #     (puck.position[0] - ai_mallet.position[0])**2 + 
-                #     (puck.position[1] - ai_mallet.position[1])**2
-                # ) / np.sqrt(WIDTH**2 + HEIGHT**2)
+                # Calculate the additional features needed
+                puck_to_mallet_dist = np.sqrt(
+                    (puck.position[0] - ai_mallet.position[0])**2 + 
+                    (puck.position[1] - ai_mallet.position[1])**2
+                ) / np.sqrt(WIDTH**2 + HEIGHT**2)
                 
-                # puck_to_ai_goal = (WIDTH - puck.position[0]) / WIDTH
-                # puck_to_player_goal = puck.position[0] / WIDTH
-                # time_since_hit = 0.5  # Placeholder since we don't track this in main
-                # puck_moving_to_player = 1.0 if puck.velocity[0] < 0 else 0.0
+                puck_to_ai_goal = (WIDTH - puck.position[0]) / WIDTH
+                puck_to_player_goal = puck.position[0] / WIDTH
+                time_since_hit = 0.5  # Placeholder since we don't track this in main
+                puck_moving_to_player = 1.0 if puck.velocity[0] < 0 else 0.0
                 
-                # # Create full observation vector
-                # observation = np.append(basic_obs, [
-                #     puck_to_mallet_dist,
-                #     puck_to_ai_goal,
-                #     puck_to_player_goal,
-                #     time_since_hit,
-                #     puck_moving_to_player,
-                #     player_score / 5.0,  # Normalize by max score
-                #     ai_score / 5.0       # Normalize by max score
-                # ])
+                # Create full observation vector
+                observation = np.append(basic_obs, [
+                    puck_to_mallet_dist,
+                    puck_to_ai_goal,
+                    puck_to_player_goal,
+                    time_since_hit,
+                    puck_moving_to_player,
+                    player_score / 5.0,  # Normalize by max score
+                    ai_score / 5.0       # Normalize by max score
+                ])
                 
                 # Make prediction with error handling
                 try:
