@@ -106,7 +106,7 @@ def main(use_rl=False):
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
-    prediction_interval = 50  # ms between predictions (higher value = better performance)
+    prediction_interval = 20  # ms between predictions (higher value = better performance)
     
     # Frame skip for AI updates
     frame_count = 0

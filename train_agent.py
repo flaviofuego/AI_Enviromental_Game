@@ -18,7 +18,7 @@ class DifficultyProgressionCallback(BaseCallback):
     """
     Callback for adjusting opponent difficulty based on agent performance.
     """
-    def __init__(self, eval_env, eval_freq=10000, verbose=1):
+    def __init__(self, eval_env, eval_freq=50000, verbose=1):
         super().__init__(verbose)
         self.eval_env = eval_env  # Environment used for evaluation
         self.eval_freq = eval_freq  # How often to evaluate and adjust difficulty
@@ -88,23 +88,37 @@ def train_agent(total_timesteps=500000, eval_freq=10000, model_name="air_hockey_
     # Create a separate environment for evaluation
     eval_env = create_improved_env()
     
-    # Create a directory for saving models
-    os.makedirs("models", exist_ok=True)
+    # # Create a directory for saving models
+   
+    # Crear directorios con rutas absolutas
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    models_dir = os.path.join(current_dir, "models")
+    logs_dir = os.path.join(current_dir, "logs")
+    best_model_dir = os.path.join(models_dir, "best_model")
+   
+    
+    # Asegurar que los directorios existan
+    os.makedirs(models_dir, exist_ok=True)
+    os.makedirs(logs_dir, exist_ok=True)
+    os.makedirs(best_model_dir, exist_ok=True)
+    
+    print(f"Guardando modelos en: {models_dir}")
+    print(f"Guardando logs en: {logs_dir}")
     
     # Create a checkpoint callback that saves the model periodically
     checkpoint_callback = CheckpointCallback(
-        save_freq=10000,
-        save_path="./models/",
+        save_freq=100000,
+        save_path=models_dir,
         name_prefix=model_name,
-        save_replay_buffer=True,
-        save_vecnormalize=True,
+        save_replay_buffer=False,
+        save_vecnormalize=False,
     )
     
     # Create an evaluation callback to monitor training progress
     eval_callback = EvalCallback(
         eval_env,
-        best_model_save_path="./models/best_model",
-        log_path="./logs/",
+        best_model_save_path=best_model_dir,
+        log_path=None,
         eval_freq=eval_freq,
         deterministic=True,
         render=False
