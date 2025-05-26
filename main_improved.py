@@ -29,13 +29,6 @@ def load_optimized_model(model_path, model_type="auto"):
     """Load and optimize the RL model for maximum performance"""
     print(f"Loading model from: {model_path}")
     
-    # Auto-detect model type if not specified
-    if model_type == "auto":
-        if "improved" in model_path or "quick" in model_path:
-            model_type = "improved"
-        else:
-            model_type = "original"
-    
     # Try to load with PPO first (most common for our models)
     model = None
     try:
@@ -51,6 +44,23 @@ def load_optimized_model(model_path, model_type="auto"):
         except Exception as e2:
             print(f"Failed to load as DQN: {e2}")
             raise Exception(f"Could not load model with either PPO or DQN: {e}, {e2}")
+    
+    # Auto-detect model type based on observation space
+    obs_space = model.observation_space
+    if hasattr(obs_space, 'shape'):
+        obs_dim = obs_space.shape[0]
+        if obs_dim == 21:
+            model_type = "enhanced"  # New enhanced models
+            print(f"Detected enhanced model with {obs_dim} dimensions")
+        elif obs_dim == 13:
+            model_type = "original"  # Original models
+            print(f"Detected original model with {obs_dim} dimensions")
+        else:
+            model_type = "unknown"
+            print(f"Unknown model type with {obs_dim} dimensions")
+    else:
+        model_type = "unknown"
+        print("Could not determine model type")
     
     # Force evaluation mode for faster inference
     model.policy.set_training_mode(False)
@@ -69,8 +79,80 @@ def load_optimized_model(model_path, model_type="auto"):
 def create_observation_for_model(ai_mallet, puck, human_mallet, player_score, ai_score, model_type="original"):
     """Create observation vector based on model type"""
     
-    if model_type == "improved":
-        # Enhanced observation for improved models (21 dimensions)
+    if model_type == "enhanced":
+        # Enhanced observation for new enhanced models (21 dimensions)
+        # This matches the EnhancedAirHockeyEnv observation space
+        ai_x_norm = ai_mallet.position[0] / WIDTH
+        ai_y_norm = ai_mallet.position[1] / HEIGHT
+        puck_x_norm = puck.position[0] / WIDTH
+        puck_y_norm = puck.position[1] / HEIGHT
+        human_x_norm = human_mallet.position[0] / WIDTH
+        human_y_norm = human_mallet.position[1] / HEIGHT
+        
+        # Normalizar velocidades
+        max_velocity = 20.0
+        puck_vx_norm = np.clip(puck.velocity[0] / max_velocity, -1, 1)
+        puck_vy_norm = np.clip(puck.velocity[1] / max_velocity, -1, 1)
+        ai_vx_norm = np.clip(ai_mallet.velocity[0] / max_velocity, -1, 1)
+        ai_vy_norm = np.clip(ai_mallet.velocity[1] / max_velocity, -1, 1)
+        human_vx_norm = np.clip(human_mallet.velocity[0] / max_velocity, -1, 1)
+        human_vy_norm = np.clip(human_mallet.velocity[1] / max_velocity, -1, 1)
+        
+        # Distancias normalizadas
+        max_distance = np.sqrt(WIDTH**2 + HEIGHT**2)
+        puck_to_ai_dist = np.sqrt(
+            (puck.position[0] - ai_mallet.position[0])**2 + 
+            (puck.position[1] - ai_mallet.position[1])**2
+        ) / max_distance
+        puck_to_human_dist = np.sqrt(
+            (puck.position[0] - human_mallet.position[0])**2 + 
+            (puck.position[1] - human_mallet.position[1])**2
+        ) / max_distance
+        
+        # Información contextual
+        puck_in_ai_half = 1.0 if puck.position[0] > WIDTH // 2 else -1.0
+        puck_moving_to_ai_goal = 1.0 if puck.velocity[0] > 0 else -1.0
+        puck_moving_to_human_goal = 1.0 if puck.velocity[0] < 0 else -1.0
+        
+        # Información de tiempo y estado
+        time_factor = 0.5  # Placeholder
+        score_diff = (ai_score - player_score) / 7.0
+        
+        # Predicción de trayectoria del puck
+        if abs(puck.velocity[0]) > 0.1:
+            time_to_ai_side = (WIDTH - puck.position[0]) / puck.velocity[0] if puck.velocity[0] > 0 else 0
+            predicted_y_at_ai_side = puck.position[1] + puck.velocity[1] * time_to_ai_side
+            predicted_y_norm = np.clip(predicted_y_at_ai_side / HEIGHT, 0, 1)
+        else:
+            predicted_y_norm = puck_y_norm
+        
+        # Construir vector de observación (21 dimensiones) - EXACTAMENTE como en EnhancedAirHockeyEnv
+        observation = np.array([
+            # Posiciones (6)
+            ai_x_norm, ai_y_norm,
+            puck_x_norm, puck_y_norm,
+            human_x_norm, human_y_norm,
+            
+            # Velocidades (6)
+            puck_vx_norm, puck_vy_norm,
+            ai_vx_norm, ai_vy_norm,
+            human_vx_norm, human_vy_norm,
+            
+            # Distancias (2)
+            puck_to_ai_dist, puck_to_human_dist,
+            
+            # Información contextual (7)
+            puck_in_ai_half,
+            puck_moving_to_ai_goal,
+            puck_moving_to_human_goal,
+            time_factor,
+            score_diff,
+            predicted_y_norm,
+            0.5  # Nivel de dificultad normalizado (placeholder)
+        ], dtype=np.float32)
+        
+    elif model_type == "improved":
+        # Legacy improved observation for older improved models (21 dimensions)
         # Normalizar posiciones
         ai_x_norm = ai_mallet.position[0] / WIDTH
         ai_y_norm = ai_mallet.position[1] / HEIGHT
@@ -179,7 +261,10 @@ def create_observation_for_model(ai_mallet, puck, human_mallet, player_score, ai
 def find_best_model():
     """Find the best available model automatically"""
     model_candidates = [
-        # Improved models (priority)
+        # Enhanced models (highest priority - new vertical movement models)
+        ("improved_models/quick_enhanced_model_final.zip", "enhanced"),
+        ("improved_models/enhanced_vertical_model_final.zip", "enhanced"),
+        # Legacy improved models
         ("improved_models/improved_air_hockey_final.zip", "improved"),
         ("improved_models/quick_model_final.zip", "improved"),
         # Original models
@@ -234,7 +319,9 @@ def main(use_rl=False, model_path=None):
                 print(f"Model type: {model_type}")
                 
                 # Pre-warm the model with appropriate observation size
-                if model_type == "improved":
+                if model_type == "enhanced":
+                    dummy_obs = np.zeros((21,), dtype=np.float32)
+                elif model_type == "improved":
                     dummy_obs = np.zeros((21,), dtype=np.float32)
                 else:
                     dummy_obs = np.zeros((13,), dtype=np.float32)
@@ -260,10 +347,7 @@ def main(use_rl=False, model_path=None):
     last_prediction_time = 0
     prediction_interval = 20  # ms between predictions
     
-    # Vertical movement fix
-    last_vertical_move = 0
-    vertical_move_cooldown = 30  # frames
-    force_vertical_threshold = 50  # pixels
+
     
     # Frame skip for AI updates
     frame_count = 0
@@ -368,27 +452,7 @@ def main(use_rl=False, model_path=None):
                             action = int(action[0])
                     else:
                         action = int(action)
-                    # Apply vertical movement fix if needed
-                    last_vertical_move += 1
-                    y_distance = abs(puck.position[1] - ai_mallet.position[1])
-                    puck_in_ai_half = puck.position[0] > WIDTH // 2
-                    
-                    # Force vertical movement if puck is far vertically and AI hasn't moved vertically recently
-                    if (y_distance > force_vertical_threshold and 
-                        last_vertical_move > vertical_move_cooldown and 
-                        puck_in_ai_half):
-                        
-                        if puck.position[1] < ai_mallet.position[1]:
-                            action = 0  # Up
-                        else:
-                            action = 1  # Down
-                        last_vertical_move = 0
-                        if show_fps:
-                            print(f"Forced vertical movement: {action}")
-                    
-                    # Reset cooldown if original action is vertical
-                    if action in [0, 1]:
-                        last_vertical_move = 0
+
                     
                     last_action = action
                 except Exception as e:
@@ -484,7 +548,10 @@ def main(use_rl=False, model_path=None):
         
         # Show model type and mode
         if use_rl:
-            mode_text = font.render(f"Mode: {model_type.title()} RL", True, WHITE)
+            if model_type == "enhanced":
+                mode_text = font.render("Mode: Enhanced RL (Vertical Movement)", True, WHITE)
+            else:
+                mode_text = font.render(f"Mode: {model_type.title()} RL", True, WHITE)
         else:
             mode_text = font.render("Mode: Simple AI", True, WHITE)
         screen.blit(mode_text, (WIDTH // 2 - mode_text.get_width() // 2, HEIGHT - 30))
@@ -557,28 +624,38 @@ if __name__ == "__main__":
                 else:
                     print("Please train a model first")
         elif choice == "3":
-            print("\nAvailable models:")
-            models = []
-            
-            # Check for improved models
-            improved_models = [
-                "improved_models/improved_air_hockey_final.zip",
-                "improved_models/quick_model_final.zip"
-            ]
-            for i, model_path in enumerate(improved_models):
-                if os.path.exists(model_path):
-                    models.append((model_path, "improved"))
-                    print(f"{len(models)}. {model_path} (Improved)")
-            
-            # Check for original models
-            original_models = [
-                "models/air_hockey_ppo_final.zip",
-                "air_hockey_dqn.zip"
-            ]
-            for model_path in original_models:
-                if os.path.exists(model_path):
-                    models.append((model_path, "original"))
-                    print(f"{len(models)}. {model_path} (Original)")
+                    print("\nAvailable models:")
+        models = []
+        
+        # Check for enhanced models (new vertical movement models)
+        enhanced_models = [
+            "improved_models/quick_enhanced_model_final.zip",
+            "improved_models/enhanced_vertical_model_final.zip"
+        ]
+        for model_path in enhanced_models:
+            if os.path.exists(model_path):
+                models.append((model_path, "enhanced"))
+                print(f"{len(models)}. {model_path} (Enhanced - Vertical Movement)")
+        
+        # Check for legacy improved models
+        improved_models = [
+            "improved_models/improved_air_hockey_final.zip",
+            "improved_models/quick_model_final.zip"
+        ]
+        for model_path in improved_models:
+            if os.path.exists(model_path):
+                models.append((model_path, "improved"))
+                print(f"{len(models)}. {model_path} (Legacy Improved)")
+        
+        # Check for original models
+        original_models = [
+            "models/air_hockey_ppo_final.zip",
+            "air_hockey_dqn.zip"
+        ]
+        for model_path in original_models:
+            if os.path.exists(model_path):
+                models.append((model_path, "original"))
+                print(f"{len(models)}. {model_path} (Original)")
             
             if not models:
                 print("No models found. Please train a model first.")

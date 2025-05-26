@@ -261,6 +261,7 @@ def main():
     # Find available models
     model_candidates = [
         "improved_models/quick_model_final.zip",
+        "improved_models/quick_enhanced_model_final.zip",
         "improved_models/improved_air_hockey_final.zip",
         "models/air_hockey_ppo_final.zip",
     ]
