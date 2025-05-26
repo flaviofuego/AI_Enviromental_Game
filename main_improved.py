@@ -261,7 +261,10 @@ def create_observation_for_model(ai_mallet, puck, human_mallet, player_score, ai
 def find_best_model():
     """Find the best available model automatically"""
     model_candidates = [
-        # Enhanced models (highest priority - new vertical movement models)
+        # Fixed models (highest priority - completely corrected behavior)
+        ("improved_models/fixed_air_hockey_final.zip", "enhanced"),
+        ("improved_models/quick_fixed_model_final.zip", "enhanced"),
+        # Enhanced models (high priority - new vertical movement models)
         ("improved_models/quick_enhanced_model_final.zip", "enhanced"),
         ("improved_models/enhanced_vertical_model_final.zip", "enhanced"),
         # Legacy improved models
@@ -347,7 +350,12 @@ def main(use_rl=False, model_path=None):
     last_prediction_time = 0
     prediction_interval = 20  # ms between predictions
     
-
+    # Behavioral correction system
+    force_vertical_threshold = 80  # Force vertical movement if puck is this far vertically
+    vertical_move_cooldown = 15  # Frames between forced vertical moves
+    last_vertical_move = 100  # Time since last vertical move
+    movement_history = []  # Track recent actions
+    stuck_in_bottom_counter = 0  # Counter for being stuck in bottom
     
     # Frame skip for AI updates
     frame_count = 0
@@ -454,6 +462,58 @@ def main(use_rl=False, model_path=None):
                         action = int(action)
 
                     
+                    # BEHAVIORAL CORRECTION SYSTEM
+                    last_vertical_move += 1
+                    movement_history.append(action)
+                    if len(movement_history) > 20:
+                        movement_history.pop(0)
+                    
+                    # Check if AI is stuck in the bottom of the field
+                    if ai_mallet.position[1] > HEIGHT * 0.75:
+                        stuck_in_bottom_counter += 1
+                    else:
+                        stuck_in_bottom_counter = 0
+                    
+                    # Force vertical movement if needed
+                    original_action = action
+                    y_distance = abs(puck.position[1] - ai_mallet.position[1])
+                    puck_in_ai_half = puck.position[0] > WIDTH // 2
+                    
+                    # Count recent vertical movements
+                    recent_vertical = sum(1 for a in movement_history[-10:] if a in [0, 1]) if len(movement_history) >= 10 else 0
+                    
+                    # Force vertical movement conditions
+                    force_vertical = False
+                    
+                    # 1. Puck is far vertically and AI hasn't moved vertically recently
+                    if (y_distance > force_vertical_threshold and 
+                        last_vertical_move > vertical_move_cooldown and 
+                        puck_in_ai_half and recent_vertical < 2):
+                        force_vertical = True
+                        reason = "puck_far_vertical"
+                    
+                    # 2. AI is stuck in bottom corner
+                    elif stuck_in_bottom_counter > 5 and recent_vertical == 0:
+                        force_vertical = True
+                        reason = "stuck_in_bottom"
+                    
+                    # 3. No vertical movement in recent history and puck is in AI half
+                    elif (len(movement_history) >= 15 and recent_vertical == 0 and 
+                          puck_in_ai_half and y_distance > 40):
+                        force_vertical = True
+                        reason = "no_recent_vertical"
+                    
+                    if force_vertical:
+                        if puck.position[1] < ai_mallet.position[1]:
+                            action = 0  # Up
+                        else:
+                            action = 1  # Down
+                        last_vertical_move = 0
+                        
+                        # Debug info (optional)
+                        if show_fps:
+                            print(f"Forced vertical movement: {action} (reason: {reason})")
+                    
                     last_action = action
                 except Exception as e:
                     print(f"Prediction error: {e}")
@@ -548,13 +608,15 @@ def main(use_rl=False, model_path=None):
         
         # Show model type and mode
         if use_rl:
-            if model_type == "enhanced":
+            if "fixed" in str(model).lower() if model else False:
+                mode_text = font.render("Mode: Fixed RL (Behavioral Corrections)", True, WHITE)
+            elif model_type == "enhanced":
                 mode_text = font.render("Mode: Enhanced RL (Vertical Movement)", True, WHITE)
             else:
                 mode_text = font.render(f"Mode: {model_type.title()} RL", True, WHITE)
         else:
             mode_text = font.render("Mode: Simple AI", True, WHITE)
-        screen.blit(mode_text, (WIDTH // 2 - mode_text.get_width() // 2, HEIGHT - 30))
+        screen.blit(mode_text, (WIDTH // 2 - mode_text.get_width() // 2, HEIGHT - 50))
         
         controls_text = font.render("F: FPS | R: Reset | M: Switch Model | ESC: Quit", True, WHITE)
         screen.blit(controls_text, (10, HEIGHT - 30))
