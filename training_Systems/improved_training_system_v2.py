@@ -13,7 +13,7 @@ from collections import deque
 
 # Import the environment and constants
 from air_hockey_env import AirHockeyEnv
-from constants import WIDTH, HEIGHT
+from constants import WIDTH, HEIGHT, MODELS, LOGS, PATH
 
 class MovementBalanceCallback(BaseCallback):
     """Callback to monitor and encourage balanced movement during training"""
@@ -311,8 +311,8 @@ def train_enhanced_model(timesteps=2000000, model_name="enhanced_vertical_model"
     eval_env = create_enhanced_env()
     
     # Create directories
-    models_dir = "improved_models"
-    logs_dir = "logs"
+    models_dir = MODELS
+    logs_dir = LOGS
     os.makedirs(models_dir, exist_ok=True)
     os.makedirs(logs_dir, exist_ok=True)
     
@@ -484,9 +484,9 @@ def test_enhanced_model(model_path, num_tests=2000):
 def compare_models():
     """Compare different models"""
     models_to_test = [
-        ("improved_models/enhanced_vertical_model_final.zip", "Enhanced V2"),
-        ("improved_models/balanced_air_hockey_final.zip", "Balanced V1"),
-        ("improved_models/quick_model_final.zip", "Original Quick"),
+        (f"{MODELS}/enhanced_vertical_model_final.zip", "Enhanced V2"),
+        (f"{MODELS}/balanced_air_hockey_final.zip", "Balanced V1"),
+        (f"{MODELS}/quick_model_final.zip", "Original Quick"),
     ]
     
     print("🔍 COMPARING MODELS")
@@ -517,20 +517,20 @@ def main():
         model = train_enhanced_model(2000000, "enhanced_vertical_model")
         
         print("\n📊 Testing the new model...")
-        test_enhanced_model(f"improved_models/enhanced_vertical_model_final.zip")
-        
+        test_enhanced_model(f"{MODELS}/enhanced_vertical_model_final.zip")
+
     elif choice == "2":
         print("\n⚡ Training quick enhanced model (500K timesteps)...")
         model = train_enhanced_model(500000, "quick_enhanced_model")
         
         print("\n📊 Testing the new model...")
-        test_enhanced_model(f"improved_models/quick_enhanced_model_final.zip")
-        
+        test_enhanced_model(f"{MODELS}/quick_enhanced_model_final.zip")
+
     elif choice == "3":
         models = [
-            "improved_models/enhanced_vertical_model_final.zip",
-            "improved_models/quick_enhanced_model_final.zip",
-            "improved_models/balanced_air_hockey_final.zip",
+            f"{MODELS}/enhanced_vertical_model_final.zip",
+            f"{MODELS}/quick_enhanced_model_final.zip",
+            f"{MODELS}/balanced_air_hockey_final.zip",
         ]
         
         available = [m for m in models if os.path.exists(m)]

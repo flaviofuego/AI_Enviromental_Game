@@ -10,6 +10,7 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback,BaseCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from ..constants import LOGS, MODELS, PATH
 
 torch.set_num_threads(6)  # Usa 4 threads CPU (ajusta según tu procesador)
 torch.cuda.is_available = lambda: False
@@ -91,9 +92,9 @@ def train_agent(total_timesteps=500000, eval_freq=10000, model_name="air_hockey_
     # # Create a directory for saving models
    
     # Crear directorios con rutas absolutas
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    models_dir = os.path.join(current_dir, "models")
-    logs_dir = os.path.join(current_dir, "logs")
+    current_dir = PATH
+    models_dir = os.path.join(current_dir, MODELS)
+    logs_dir = os.path.join(current_dir, LOGS)
     best_model_dir = os.path.join(models_dir, "best_model")
    
     
@@ -180,7 +181,7 @@ def train_agent(total_timesteps=500000, eval_freq=10000, model_name="air_hockey_
 
 
 
-def play_with_trained_model(model_name="models/air_hockey_ppo_final"):
+def play_with_trained_model(model_name=f"{MODELS}/air_hockey_ppo_final"):
     """Load a trained model and play in human render mode"""
     
     # Initialize pygame for rendering
@@ -282,8 +283,8 @@ if __name__ == "__main__":
     
     elif choice == "3":
         print("\n=== Suggested Environment Improvements ===\n")
-        suggested_code = modify_air_hockey_env()
-        print(suggested_code)
+        #suggested_code = modify_air_hockey_env()
+        #print(suggested_code)
         print("\nIncorporate these changes into your air_hockey_env.py file to improve training.")
     
     else:

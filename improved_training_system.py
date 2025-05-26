@@ -13,6 +13,18 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.noise import NormalActionNoise
 import matplotlib.pyplot as plt
 from collections import deque
+from constants import PATH, MODELS, LOGS
+
+LEARNING_RATE = 2e-4  # Learning rate para PPO
+MAX_EPISODES = 100000  # Número máximo de episodios para entrenamiento
+N_STEPS = 4096  # Pasos por actualización
+ENTROPY_COEF = 0.005  # Coeficiente de entropía para PPO
+BATCH_SIZE = 128  # Tamaño del batch para entrenamiento
+GAMMA = 0.995  # Factor de descuento
+GAE_LAMBDA = 0.98  # Lambda para GAE
+CLIP_RANGE = 0.15  # Rango de clipping para PPO
+VF_COEF = 0.5  # Coeficiente de la función de valor
+MAX_GRAD_NORM = 0.5  # Normalización del gradiente
 
 torch.set_num_threads(6)
 torch.cuda.is_available = lambda: False
@@ -703,9 +715,9 @@ def train_improved_agent(total_timesteps=2000000, model_name="improved_air_hocke
     eval_env = create_improved_env()
     
     # Crear directorios
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    models_dir = os.path.join(current_dir, "improved_models")
-    logs_dir = os.path.join(current_dir, "improved_logs")
+    current_dir = PATH
+    models_dir = MODELS
+    logs_dir = LOGS
     best_model_dir = os.path.join(models_dir, "best_model")
     
     os.makedirs(models_dir, exist_ok=True)
@@ -739,15 +751,15 @@ def train_improved_agent(total_timesteps=2000000, model_name="improved_air_hocke
         "MlpPolicy",
         env,
         device="cpu",
-        learning_rate=2e-4,  # Learning rate más bajo para estabilidad
-        n_steps=4096,        # Más pasos por actualización
-        batch_size=128,      # Batch size más grande
-        gamma=0.995,         # Factor de descuento más alto para planificación a largo plazo
-        gae_lambda=0.98,     # GAE más alto para mejor estimación de ventaja
-        clip_range=0.15,     # Clipping más conservador
-        ent_coef=0.005,      # Menos entropía para comportamiento más determinista
-        vf_coef=0.5,
-        max_grad_norm=0.5,
+        learning_rate=LEARNING_RATE,  # Learning rate más bajo para estabilidad
+        n_steps=N_STEPS,        # Más pasos por actualización
+        batch_size=BATCH_SIZE,      # Batch size más grande
+        gamma=GAMMA,         # Factor de descuento más alto para planificación a largo plazo
+        gae_lambda=GAE_LAMBDA,     # GAE más alto para mejor estimación de ventaja
+        clip_range=CLIP_RANGE,     # Clipping más conservador
+        ent_coef=ENTROPY_COEF,      # Menos entropía para comportamiento más determinista
+        vf_coef=VF_COEF,
+        max_grad_norm=MAX_GRAD_NORM,
         policy_kwargs=dict(
             net_arch=[dict(pi=[256, 256, 128], vf=[256, 256, 128])],  # Red más profunda
             activation_fn=torch.nn.ReLU
@@ -765,7 +777,7 @@ def train_improved_agent(total_timesteps=2000000, model_name="improved_air_hocke
     )
     
     # Guardar modelo final
-    final_model_path = f"./improved_models/{model_name}_final"
+    final_model_path = f"./{MODELS}/{model_name}_final"
     model.save(final_model_path)
     
     training_time = time.time() - start_time

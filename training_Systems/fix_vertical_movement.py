@@ -7,6 +7,7 @@ import os
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
+from constants import PATH, MODELS, LOGS
 
 # Import the environment
 from ..air_hockey_env import AirHockeyEnv
@@ -249,13 +250,13 @@ def main():
         model = train_balanced_model(timesteps, "balanced_air_hockey")
         
         print("\nTesting the new model...")
-        test_model_balance(f"improved_models/balanced_air_hockey_final.zip")
+        test_model_balance(f"{MODELS}/balanced_air_hockey_final.zip")
         
     elif choice == "2":
         models = [
-            "improved_models/quick_model_final.zip",
-            "improved_models/improved_air_hockey_final.zip",
-            "models/air_hockey_ppo_final.zip"
+            f"{MODELS}/quick_model_final.zip",
+            f"{MODELS}/improved_air_hockey_final.zip",
+            f"{MODELS}/air_hockey_ppo_final.zip"
         ]
         
         available = [m for m in models if os.path.exists(m)]
@@ -278,9 +279,9 @@ def main():
     elif choice == "3":
         print("\nComparing all available models...")
         models = [
-            "improved_models/quick_model_final.zip",
-            "improved_models/improved_air_hockey_final.zip", 
-            "models/air_hockey_ppo_final.zip"
+            f"{MODELS}/quick_model_final.zip",
+            f"{MODELS}/improved_air_hockey_final.zip", 
+            f"{MODELS}/air_hockey_ppo_final.zip"
         ]
         
         for model_path in models:

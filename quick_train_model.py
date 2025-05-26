@@ -23,7 +23,7 @@ def main():
     )
     
     print(f"Entrenamiento completado!")
-    print(f"   Modelo guardado como: improved_models/{args.name}_final.zip")
+    print(f"   Modelo guardado como: models/{args.name}_final.zip")
 
 if __name__ == "__main__":
     main()

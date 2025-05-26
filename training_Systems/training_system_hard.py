@@ -11,6 +11,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback,
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
 from collections import deque
+from constants import LOGS, MODELS, PATH
 
 torch.set_num_threads(6)
 torch.cuda.is_available = lambda: False
@@ -618,8 +619,8 @@ def train_fixed_agent(total_timesteps=1500000, model_name="fixed_air_hockey"):
     eval_env = create_fixed_env()
     
     # Crear directorios
-    models_dir = "improved_models"
-    logs_dir = "logs"
+    models_dir = MODELS
+    logs_dir = LOGS
     os.makedirs(models_dir, exist_ok=True)
     os.makedirs(logs_dir, exist_ok=True)
     
@@ -803,23 +804,23 @@ if __name__ == "__main__":
         model = train_fixed_agent(1500000, "fixed_air_hockey")
         
         print("\n🧪 Probando el nuevo modelo...")
-        test_fixed_model_behavior(f"improved_models/fixed_air_hockey_final.zip")
-        
+        test_fixed_model_behavior(f"{MODELS}/fixed_air_hockey_final.zip")
+
     elif choice == "2":
         print("\n⚡ Entrenando modelo corregido rápido...")
         model = train_fixed_agent(750000, "quick_fixed_model")
         
         print("\n🧪 Probando el nuevo modelo...")
-        test_fixed_model_behavior(f"improved_models/quick_fixed_model_final.zip")
-        
+        test_fixed_model_behavior(f"{MODELS}/quick_fixed_model_final.zip")
+
     elif choice == "3":
         # Buscar modelos disponibles
         models = [
-            "improved_models/fixed_air_hockey_final.zip",
-            "improved_models/quick_fixed_model_final.zip",
-            "improved_models/enhanced_vertical_model_final.zip",
-            "improved_models/quick_enhanced_model_final.zip",
-            "improved_models/improved_air_hockey_final.zip"
+            f"{MODELS}/fixed_air_hockey_final.zip",
+            f"{MODELS}/quick_fixed_model_final.zip",
+            f"{MODELS}/enhanced_vertical_model_final.zip",
+            f"{MODELS}/quick_enhanced_model_final.zip",
+            f"{MODELS}/improved_air_hockey_final.zip"
         ]
         
         available = [m for m in models if os.path.exists(m)]

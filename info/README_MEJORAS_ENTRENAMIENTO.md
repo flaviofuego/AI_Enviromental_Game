@@ -62,6 +62,7 @@ def _calculate_advanced_reward(self, prev_distance, ai_hit, goal, action):
 ```
 
 **Características:**
+
 - **Recompensas por goles**: Incentivo principal (+100 por gol, -50 por gol recibido)
 - **Recompensas por hits**: Bonus por golpear el puck, hits consecutivos, velocidad y dirección
 - **Posicionamiento estratégico**: Recompensas por buena posición defensiva/ofensiva
@@ -83,6 +84,7 @@ self.opponent_configs = {
 ```
 
 **Características:**
+
 - **Predicción de trayectoria**: El oponente predice dónde estará el puck
 - **Estrategia adaptativa**: Comportamiento ofensivo/defensivo según situación
 - **Escalabilidad**: 6 niveles de dificultad progresiva
@@ -108,6 +110,7 @@ observation = np.array([
 ```
 
 **Nuevas características:**
+
 - **Información del oponente**: Posición y velocidad del jugador humano
 - **Contexto del juego**: En qué mitad está el puck, hacia dónde se mueve
 - **Predicciones**: Dónde estará el puck cuando llegue al lado del AI
@@ -135,6 +138,7 @@ class CurriculumLearningCallback(BaseCallback):
 ```
 
 **Características:**
+
 - **Evaluación automática**: Mide tasa de victoria cada 100k pasos
 - **Progresión inteligente**: Solo aumenta dificultad si el rendimiento es consistente
 - **Adaptación bidireccional**: Puede reducir dificultad si el agente lucha
@@ -163,6 +167,7 @@ model = PPO(
 ```
 
 **Mejoras:**
+
 - **Red más profunda**: 256→256→128 neuronas vs 128→128 original
 - **Learning rate optimizado**: 2e-4 para mejor convergencia
 - **Batch size mayor**: 128 vs 64 para gradientes más estables
@@ -182,6 +187,7 @@ class AdvancedRewardCallback(BaseCallback):
 ```
 
 **Características:**
+
 - **Métricas detalladas**: Recompensas, duración, goles, hits, eficiencia
 - **Análisis de progresión**: Gráficos de evolución del aprendizaje
 - **Comparación de modelos**: Evaluación lado a lado
@@ -213,6 +219,7 @@ python training_analysis.py
 ### 4. Comparación de Modelos
 
 El script de análisis automáticamente:
+
 - Encuentra todos los modelos entrenados
 - Los evalúa en 50+ episodios
 - Genera gráficos comparativos
@@ -220,7 +227,7 @@ El script de análisis automáticamente:
 
 ## 📊 Resultados Esperados
 
-### Mejoras de Rendimiento Esperadas:
+### Mejoras de Rendimiento Esperadas
 
 1. **Tasa de Victoria**: 60-80% vs oponente nivel 3-4
 2. **Eficiencia de Gol**: 0.3-0.5 goles por hit
@@ -228,7 +235,7 @@ El script de análisis automáticamente:
 4. **Adaptabilidad**: Buen rendimiento en múltiples niveles
 5. **Convergencia**: Aprendizaje más rápido y estable
 
-### Métricas de Evaluación:
+### Métricas de Evaluación
 
 - **Win Rate**: % de episodios ganados
 - **Goal Efficiency**: Goles anotados / Hits realizados
@@ -238,15 +245,15 @@ El script de análisis automáticamente:
 
 ## 🔧 Configuración y Requisitos
 
-### Dependencias Adicionales:
+### Dependencias Adicionales
 
 ```bash
 pip install matplotlib seaborn pandas
 ```
 
-### Estructura de Archivos:
+### Estructura de Archivos
 
-```
+```plaintext
 proyecto/
 ├── improved_training_system.py    # Sistema mejorado
 ├── training_analysis.py           # Análisis y comparación
@@ -259,7 +266,7 @@ proyecto/
 
 ## 🎯 Recomendaciones de Entrenamiento
 
-### Para Mejores Resultados:
+### Para Mejores Resultados
 
 1. **Duración**: Entrena por al menos 2M pasos
 2. **Paciencia**: El curriculum learning toma tiempo
@@ -267,7 +274,7 @@ proyecto/
 4. **Evaluación**: Usa el script de análisis regularmente
 5. **Comparación**: Mantén modelos anteriores para comparar
 
-### Señales de Buen Entrenamiento:
+### Señales de Buen Entrenamiento
 
 - ✅ Tasa de victoria aumenta gradualmente
 - ✅ Dificultad del oponente se incrementa automáticamente
@@ -275,7 +282,7 @@ proyecto/
 - ✅ Eficiencia de gol se mantiene o mejora
 - ✅ Varianza en recompensas disminuye
 
-### Señales de Problemas:
+### Señales de Problemas
 
 - ❌ Tasa de victoria se estanca en <30%
 - ❌ Dificultad no aumenta después de 1M pasos
@@ -288,11 +295,13 @@ proyecto/
 ### Problema: El agente no mejora
 
 **Posibles causas:**
+
 - Learning rate muy alto/bajo
 - Oponente demasiado difícil desde el inicio
 - Función de recompensa mal balanceada
 
 **Soluciones:**
+
 - Ajustar `learning_rate` entre 1e-4 y 5e-4
 - Verificar que empiece en dificultad 0
 - Revisar balance de recompensas en logs
@@ -300,6 +309,7 @@ proyecto/
 ### Problema: Entrenamiento muy lento
 
 **Soluciones:**
+
 - Reducir `n_steps` a 2048
 - Usar `batch_size` más pequeño (64)
 - Reducir frecuencia de evaluación
@@ -307,6 +317,7 @@ proyecto/
 ### Problema: Comportamiento errático
 
 **Soluciones:**
+
 - Aumentar `clip_range` a 0.2
 - Reducir `ent_coef` a 0.001
 - Verificar normalización de observaciones
@@ -321,4 +332,4 @@ proyecto/
 
 ---
 
-Este sistema mejorado debería proporcionar un rendimiento significativamente mejor que el sistema original. La clave está en el entrenamiento progresivo, las recompensas balanceadas y el oponente inteligente que proporciona un desafío apropiado en cada etapa del aprendizaje. 
+Este sistema mejorado debería proporcionar un rendimiento significativamente mejor que el sistema original. La clave está en el entrenamiento progresivo, las recompensas balanceadas y el oponente inteligente que proporciona un desafío apropiado en cada etapa del aprendizaje.
