@@ -354,8 +354,12 @@ def main(use_rl=False, model_path=None):
     force_vertical_threshold = 80  # Force vertical movement if puck is this far vertically
     vertical_move_cooldown = 15  # Frames between forced vertical moves
     last_vertical_move = 100  # Time since last vertical move
+    force_horizontal_threshold = 120  # Force horizontal movement if puck is this far horizontally
+    horizontal_move_cooldown = 15  # Frames between forced horizontal moves
+    last_horizontal_move = 100  # Time since last horizontal move
     movement_history = []  # Track recent actions
     stuck_in_bottom_counter = 0  # Counter for being stuck in bottom
+    stuck_in_side_counter = 0  # Counter for being stuck in side
     
     # Frame skip for AI updates
     frame_count = 0
@@ -412,11 +416,11 @@ def main(use_rl=False, model_path=None):
                         # Find next model
                         current_improved = model_type == "improved"
                         if current_improved:
-                            # Try original models
-                            for path in ["models/air_hockey_ppo_final.zip", "air_hockey_dqn.zip"]:
+                            # Try Fixed models
+                            for path in ["improved_models/fixed_air_hockey_final.zip", "improved_models/quick_fixed_model_final.zip"]:
                                 if os.path.exists(path):
                                     try:
-                                        model, model_type = load_optimized_model(path, "original")
+                                        model, model_type = load_optimized_model(path, "enhanced")
                                         print(f"Switched to: {path}")
                                         break
                                     except:
@@ -464,6 +468,7 @@ def main(use_rl=False, model_path=None):
                     
                     # BEHAVIORAL CORRECTION SYSTEM
                     last_vertical_move += 1
+                    last_horizontal_move += 1
                     movement_history.append(action)
                     if len(movement_history) > 20:
                         movement_history.pop(0)
@@ -474,17 +479,28 @@ def main(use_rl=False, model_path=None):
                     else:
                         stuck_in_bottom_counter = 0
                     
-                    # Force vertical movement if needed
+                    # Check if AI is stuck on the sides (too close to AI goal or center line)
+                    if (ai_mallet.position[0] > WIDTH * 0.85 or  # Too close to AI goal
+                        ai_mallet.position[0] < WIDTH * 0.55):   # Too close to center line
+                        stuck_in_side_counter += 1
+                    else:
+                        stuck_in_side_counter = 0
+                    
+                    # Calculate distances and game state
                     original_action = action
                     y_distance = abs(puck.position[1] - ai_mallet.position[1])
+                    x_distance = abs(puck.position[0] - ai_mallet.position[0])
                     puck_in_ai_half = puck.position[0] > WIDTH // 2
                     
-                    # Count recent vertical movements
+                    # Count recent movements
                     recent_vertical = sum(1 for a in movement_history[-10:] if a in [0, 1]) if len(movement_history) >= 10 else 0
+                    recent_horizontal = sum(1 for a in movement_history[-10:] if a in [2, 3]) if len(movement_history) >= 10 else 0
                     
-                    # Force vertical movement conditions
+                    # Force movement conditions
                     force_vertical = False
+                    force_horizontal = False
                     
+                    # VERTICAL MOVEMENT FORCING
                     # 1. Puck is far vertically and AI hasn't moved vertically recently
                     if (y_distance > force_vertical_threshold and 
                         last_vertical_move > vertical_move_cooldown and 
@@ -503,6 +519,26 @@ def main(use_rl=False, model_path=None):
                         force_vertical = True
                         reason = "no_recent_vertical"
                     
+                    # HORIZONTAL MOVEMENT FORCING
+                    # 1. Puck is far horizontally and AI hasn't moved horizontally recently
+                    if (not force_vertical and x_distance > force_horizontal_threshold and 
+                        last_horizontal_move > horizontal_move_cooldown and 
+                        puck_in_ai_half and recent_horizontal < 2):
+                        force_horizontal = True
+                        reason = "puck_far_horizontal"
+                    
+                    # 2. AI is stuck on the sides
+                    elif (not force_vertical and stuck_in_side_counter > 5 and recent_horizontal == 0):
+                        force_horizontal = True
+                        reason = "stuck_in_side"
+                    
+                    # 3. No horizontal movement in recent history and puck is in AI half
+                    elif (not force_vertical and len(movement_history) >= 15 and recent_horizontal == 0 and 
+                          puck_in_ai_half and x_distance > 60):
+                        force_horizontal = True
+                        reason = "no_recent_horizontal"
+                    
+                    # Apply forced movements (vertical has priority)
                     if force_vertical:
                         if puck.position[1] < ai_mallet.position[1]:
                             action = 0  # Up
@@ -513,6 +549,17 @@ def main(use_rl=False, model_path=None):
                         # Debug info (optional)
                         if show_fps:
                             print(f"Forced vertical movement: {action} (reason: {reason})")
+                    
+                    elif force_horizontal:
+                        if puck.position[0] > ai_mallet.position[0]:
+                            action = 3  # Right
+                        else:
+                            action = 2  # Left
+                        last_horizontal_move = 0
+                        
+                        # Debug info (optional)
+                        if show_fps:
+                            print(f"Forced horizontal movement: {action} (reason: {reason})")
                     
                     last_action = action
                 except Exception as e:
@@ -609,11 +656,11 @@ def main(use_rl=False, model_path=None):
         # Show model type and mode
         if use_rl:
             if "fixed" in str(model).lower() if model else False:
-                mode_text = font.render("Mode: Fixed RL (Behavioral Corrections)", True, WHITE)
+                mode_text = font.render("Mode: Fixed RL (Full Movement Corrections)", True, WHITE)
             elif model_type == "enhanced":
-                mode_text = font.render("Mode: Enhanced RL (Vertical Movement)", True, WHITE)
+                mode_text = font.render("Mode: Enhanced RL (Vertical & Horizontal Movement)", True, WHITE)
             else:
-                mode_text = font.render(f"Mode: {model_type.title()} RL", True, WHITE)
+                mode_text = font.render(f"Mode: {model_type.title()} RL (Movement Corrections)", True, WHITE)
         else:
             mode_text = font.render("Mode: Simple AI", True, WHITE)
         screen.blit(mode_text, (WIDTH // 2 - mode_text.get_width() // 2, HEIGHT - 50))
@@ -688,6 +735,16 @@ if __name__ == "__main__":
         elif choice == "3":
                     print("\nAvailable models:")
         models = []
+        
+        fixed_models = [
+            "improved_models/fixed_air_hockey_final.zip",
+            "improved_models/quick_fixed_model_final.zip"
+        ]
+        for model_path in fixed_models:
+            if os.path.exists(model_path):
+                models.append((model_path, "fixed"))
+                print(f"{len(models)}. {model_path} (Fixed)")
+                
         
         # Check for enhanced models (new vertical movement models)
         enhanced_models = [
