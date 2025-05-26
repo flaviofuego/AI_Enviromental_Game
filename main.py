@@ -6,9 +6,9 @@ import numpy as np
 import torch
 import time
 
-torch.cuda.is_available = lambda: False
 
 # Performance optimization settings
+torch.cuda.is_available = lambda: False
 os.environ['OMP_NUM_THREADS'] = '4'
 torch.set_num_threads(4)
 

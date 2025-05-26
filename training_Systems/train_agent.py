@@ -65,7 +65,7 @@ class DifficultyProgressionCallback(BaseCallback):
         return True  # Continue training
     
 # Import your custom environment
-from air_hockey_env import AirHockeyEnv
+from ..air_hockey_env import AirHockeyEnv
 
 def create_improved_env():
     """Create an enhanced environment with more informative observations"""

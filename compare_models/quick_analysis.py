@@ -12,11 +12,11 @@ def main():
     # Buscar modelos
     models_found = []
     
-    if os.path.exists("improved_models/quick_model_final.zip"):
-        models_found.append(("improved_models/quick_model_final.zip", "Modelo Rapido", "improved"))
+    if os.path.exists("..improved_models/quick_model_final.zip"):
+        models_found.append(("..improved_models/quick_model_final.zip", "Modelo Rapido", "improved"))
     
-    if os.path.exists("models/air_hockey_ppo_final.zip"):
-        models_found.append(("models/air_hockey_ppo_final.zip", "Modelo Original", "original"))
+    if os.path.exists("..models/air_hockey_ppo_final.zip"):
+        models_found.append(("..models/air_hockey_ppo_final.zip", "Modelo Original", "original"))
     
     if not models_found:
         print("ERROR: No se encontraron modelos para analizar")

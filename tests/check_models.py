@@ -106,21 +106,18 @@ def main():
         
         # Original models
         "models/air_hockey_ppo_final.zip",
-        "air_hockey_dqn.zip",
-        
-        # Check for any other models in directories
     ]
     
     # Add any other .zip files found in directories
-    if os.path.exists("improved_models"):
+    if os.path.exists("..improved_models"):
         for file in os.listdir("improved_models"):
             if file.endswith(".zip") and file not in [os.path.basename(p) for p in model_paths]:
-                model_paths.append(os.path.join("improved_models", file))
+                model_paths.append(os.path.join("..improved_models", file))
     
-    if os.path.exists("models"):
-        for file in os.listdir("models"):
+    if os.path.exists("..models"):
+        for file in os.listdir("..models"):
             if file.endswith(".zip") and file not in [os.path.basename(p) for p in model_paths]:
-                model_paths.append(os.path.join("models", file))
+                model_paths.append(os.path.join("..models", file))
     
     # Check current directory for .zip files
     for file in os.listdir("."):

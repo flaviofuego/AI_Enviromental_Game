@@ -1,3 +1,4 @@
+import os
 # Constantes para el juego de Air Hockey
 
 # Dimensiones
@@ -21,3 +22,7 @@ COLLISION_ELASTICITY = 0.9  # Elasticidad en las colisiones (1.0 = perfectamente
 
 # Parámetros del juego
 GOAL_WIDTH_RATIO = 1/3  # La portería ocupa 1/3 de la altura
+
+LOGS = 'logs'
+MODELS = 'models'
+PATH = os.path.dirname(os.path.abspath(__file__))

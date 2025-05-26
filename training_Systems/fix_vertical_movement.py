@@ -9,7 +9,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
 
 # Import the environment
-from air_hockey_env import AirHockeyEnv
+from ..air_hockey_env import AirHockeyEnv
 
 class BalancedMovementCallback(BaseCallback):
     """Callback to monitor and encourage balanced movement during training"""

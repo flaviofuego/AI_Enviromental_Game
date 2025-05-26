@@ -2,7 +2,7 @@
 import os
 import numpy as np
 from stable_baselines3 import PPO
-from improved_training_system_fixed import FixedAirHockeyEnv, test_fixed_model_behavior
+from ..training_Systems.improved_training_system_fixed import FixedAirHockeyEnv, test_fixed_model_behavior
 
 def find_all_models():
     """Encuentra todos los modelos disponibles"""

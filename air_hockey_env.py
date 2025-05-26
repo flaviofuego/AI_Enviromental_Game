@@ -8,7 +8,9 @@ from constants import *
 from sprites import Puck, HumanMallet
 from table import Table
 
-   
+SPACE_NUMBER = 5 # 0: Up, 1: Down, 2: Left, 3: Right, 4: Stay
+MAX_STEPS = 1000
+MEDIUM_CAMP = WIDTH / 2
     
 class AirHockeyEnv(gym.Env):
     """Custom Environment for Air Hockey game that follows gym interface"""
@@ -19,9 +21,7 @@ class AirHockeyEnv(gym.Env):
         
         self.play_mode = play_mode
         
-        # Define action space
-        # 0: Up, 1: Down, 2: Left, 3: Right, 4: Stay
-        self.action_space = spaces.Discrete(5)
+        self.action_space = spaces.Discrete(SPACE_NUMBER) # Define action space
         
         # Define observation space
         # [mallet_x, mallet_y, puck_x, puck_y, puck_vx, puck_vy]
@@ -50,10 +50,11 @@ class AirHockeyEnv(gym.Env):
         self.player_score = 0
         self.ai_score = 0
         self.steps = 0
-        self.max_steps = 1000
+        self.max_steps = MAX_STEPS
         self.opponent_skill = 0.3  # Starting skill level
         # Initialize the game
         self.reset()
+    
     # Then add this method to periodically increase difficulty
     def increase_opponent_difficulty(self, current_reward):
         """Increase opponent difficulty based on AI performance"""
@@ -138,21 +139,11 @@ class AirHockeyEnv(gym.Env):
             self._update_human_player()
         # Action handling remains the same...
         
-        # # Update AI mallet sprite position and velocity
-        # self.ai_mallet.rect.center = self.ai_mallet_position
-        # self.ai_mallet_velocity = [
-        #     self.ai_mallet_position[0] - prev_position[0],
-        #     self.ai_mallet_position[1] - prev_position[1]
-        # ]
-        
-        
-        
         # Store previous distance for reward calculation
         prev_distance = np.sqrt((self.puck.position[0] - self.ai_mallet_position[0])**2 + 
                             (self.puck.position[1] - self.ai_mallet_position[1])**2)
         
-        # Update puck
-        self.puck.update()
+        self.puck.update() # Update puck
         
         # Check collisions
         ai_hit_puck = self._check_mallet_collision(self.ai_mallet, self.ai_mallet_position, 
@@ -219,6 +210,7 @@ class AirHockeyEnv(gym.Env):
         
         # Update previous position
         self.human_mallet.prev_position = self.human_mallet.position.copy()
+
     def _update_human_player(self):
         """Advanced behavior for the simulated human player during training"""
         # Define skill parameters (can be adjusted for curriculum learning)
@@ -321,6 +313,7 @@ class AirHockeyEnv(gym.Env):
             move_x,
             move_y
         ]
+
     def _get_observation(self):
         """Return an enhanced observation with more game state information"""
         # Basic observation (normalized positions and velocities)
@@ -390,7 +383,7 @@ class AirHockeyEnv(gym.Env):
         #     reward += defensive_reward
         
         # Reward for getting closer to the puck when it's in AI's half
-        if self.puck.position[0] > WIDTH / 2:
+        if self.puck.position[0] > MEDIUM_CAMP:
             # Reward for closing distance to puck
             if current_distance < prev_distance:
                 reward += 0.1 * min(1.0, (prev_distance - current_distance) * 0.1)

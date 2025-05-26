@@ -6,7 +6,7 @@ import os
 import time
 from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
-from improved_training_system import ImprovedAirHockeyEnv, create_improved_env
+from ..improved_training_system import ImprovedAirHockeyEnv, create_improved_env
 from air_hockey_env import AirHockeyEnv
 import seaborn as sns
 
@@ -276,10 +276,10 @@ def test_different_difficulties():
     
     # Buscar modelo mejorado
     model_path = None
-    if os.path.exists("improved_models/improved_air_hockey_final.zip"):
-        model_path = "improved_models/improved_air_hockey_final.zip"
-    elif os.path.exists("models/air_hockey_ppo_final.zip"):
-        model_path = "models/air_hockey_ppo_final.zip"
+    if os.path.exists("../improved_models/improved_air_hockey_final.zip"):
+        model_path = "../improved_models/improved_air_hockey_final.zip"
+    elif os.path.exists("../models/air_hockey_ppo_final.zip"):
+        model_path = "../models/air_hockey_ppo_final.zip"
     else:
         print("No se encontró ningún modelo entrenado")
         return
@@ -360,15 +360,15 @@ def main():
     models_to_test = []
     
     # Modelo mejorado
-    if os.path.exists("improved_models/improved_air_hockey_final.zip"):
+    if os.path.exists("../improved_models/improved_air_hockey_final.zip"):
         models_to_test.append(("improved_models/improved_air_hockey_final.zip", "Modelo Mejorado", "improved"))
     
     # Modelo original
-    if os.path.exists("models/air_hockey_ppo_final.zip"):
+    if os.path.exists("../models/air_hockey_ppo_final.zip"):
         models_to_test.append(("models/air_hockey_ppo_final.zip", "Modelo Original", "original"))
     
     # Modelo DQN si existe
-    if os.path.exists("air_hockey_dqn.zip"):
+    if os.path.exists("../air_hockey_dqn.zip"):
         models_to_test.append(("air_hockey_dqn.zip", "Modelo DQN", "original"))
     
     if not models_to_test:
