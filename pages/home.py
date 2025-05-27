@@ -17,7 +17,7 @@ class HockeyMainScreen:
         self.is_mobile = self.screen_height > self.screen_width
         
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-        pygame.display.set_caption("Hockey Ice Melting Down - Salva la Tierra")
+        pygame.display.set_caption("Hockey Is Melting Down - Salva la Tierra")
         
         # Colores temáticos
         self.colors = {
@@ -88,7 +88,7 @@ class HockeyMainScreen:
                 'play': {'pos': (center_x, center_y), 'radius': 60, 'color': self.colors['hope_green']},
                 'history': {'pos': (center_x - 120, center_y), 'radius': 35, 'color': self.colors['ice_blue']},
                 'player': {'pos': (center_x + 120, center_y), 'radius': 35, 'color': self.colors['warning_orange']},
-                'background': {'pos': (center_x, center_y + 80), 'radius': 30, 'color': self.colors['button_active']},
+                'background': {'pos': (center_x, center_y + 120), 'radius': 30, 'color': self.colors['button_active']},
                 'settings': {'pos': (40, 40), 'radius': 25, 'color': self.colors['ice_blue']},
                 'help': {'pos': (self.screen_width - 40, 40), 'radius': 25, 'color': self.colors['ice_blue']}
             }
@@ -97,6 +97,15 @@ class HockeyMainScreen:
         self.animation_time = 0
         self.particles = []
         self.create_particles()
+        
+        # Nuevos efectos animados para el fondo
+        self.pollution_particles = []
+        self.heat_waves = []
+        self.acid_rain = []
+        self.melting_ice = []
+        self.hope_sparkles = []
+        self.aurora_strips = []
+        self.create_environmental_effects()
         
         # Paneles
         self.show_gaia_panel = False
@@ -124,6 +133,267 @@ class HockeyMainScreen:
                 ])
             })
     
+    def create_environmental_effects(self):
+        """Crear efectos ambientales animados"""
+        # Partículas de contaminación (humo negro/gris)
+        for _ in range(15):
+            self.pollution_particles.append({
+                'x': random.randint(0, self.screen_width),
+                'y': random.randint(0, self.screen_height),
+                'vel_x': random.uniform(-0.3, 0.3),
+                'vel_y': random.uniform(-0.8, -0.2),
+                'size': random.randint(3, 8),
+                'alpha': random.randint(30, 80),
+                'life': random.randint(200, 400)
+            })
+        
+        # Ondas de calor
+        for _ in range(8):
+            self.heat_waves.append({
+                'y': random.randint(100, self.screen_height - 100),
+                'amplitude': random.randint(10, 30),
+                'frequency': random.uniform(0.02, 0.05),
+                'speed': random.uniform(1, 3),
+                'offset': random.uniform(0, 6.28)
+            })
+        
+        # Lluvia ácida
+        for _ in range(25):
+            self.acid_rain.append({
+                'x': random.randint(-50, self.screen_width + 50),
+                'y': random.randint(-100, -10),
+                'vel_y': random.uniform(2, 5),
+                'vel_x': random.uniform(-0.5, 0.5),
+                'length': random.randint(5, 15)
+            })
+        
+        # Hielo derritiéndose
+        for _ in range(6):
+            self.melting_ice.append({
+                'x': random.randint(50, self.screen_width - 50),
+                'y': random.randint(50, 200),
+                'drops': [],
+                'last_drop': 0
+            })
+        
+        # Chispas de esperanza (verde)
+        for _ in range(10):
+            self.hope_sparkles.append({
+                'x': random.randint(0, self.screen_width),
+                'y': random.randint(0, self.screen_height),
+                'vel_x': random.uniform(-0.5, 0.5),
+                'vel_y': random.uniform(-0.5, 0.5),
+                'size': random.randint(1, 3),
+                'pulse': random.uniform(0, 6.28),
+                'color_intensity': random.randint(100, 255)
+            })
+        
+        # Tiras de aurora dañada
+        for _ in range(5):
+            self.aurora_strips.append({
+                'points': [(random.randint(0, self.screen_width), random.randint(0, 150)) for _ in range(6)],
+                'color_shift': random.uniform(0, 6.28),
+                'flicker_intensity': random.uniform(0.3, 0.8)
+            })
+
+    def update_environmental_effects(self, dt):
+        """Actualizar todos los efectos ambientales"""
+        # Actualizar partículas de contaminación
+        for particle in self.pollution_particles:
+            particle['x'] += particle['vel_x']
+            particle['y'] += particle['vel_y']
+            particle['life'] -= 1
+            
+            if particle['life'] <= 0 or particle['y'] < -20:
+                particle['x'] = random.randint(0, self.screen_width)
+                particle['y'] = self.screen_height + 20
+                particle['life'] = random.randint(200, 400)
+        
+        # Actualizar ondas de calor
+        for wave in self.heat_waves:
+            wave['offset'] += wave['speed'] * dt
+        
+        # Actualizar lluvia ácida
+        for drop in self.acid_rain:
+            drop['x'] += drop['vel_x']
+            drop['y'] += drop['vel_y']
+            
+            if drop['y'] > self.screen_height + 10:
+                drop['x'] = random.randint(-50, self.screen_width + 50)
+                drop['y'] = random.randint(-100, -10)
+        
+        # Actualizar hielo derritiéndose
+        for ice in self.melting_ice:
+            ice['last_drop'] += dt
+            if ice['last_drop'] > random.uniform(0.5, 2.0):
+                ice['drops'].append({
+                    'x': ice['x'] + random.randint(-5, 5),
+                    'y': ice['y'],
+                    'vel_y': random.uniform(1, 3)
+                })
+                ice['last_drop'] = 0
+            
+            # Actualizar gotas de hielo
+            for drop in ice['drops'][:]:
+                drop['y'] += drop['vel_y']
+                if drop['y'] > self.screen_height:
+                    ice['drops'].remove(drop)
+        
+        # Actualizar chispas de esperanza
+        for sparkle in self.hope_sparkles:
+            sparkle['x'] += sparkle['vel_x']
+            sparkle['y'] += sparkle['vel_y']
+            sparkle['pulse'] += dt * 3
+            
+            # Wraparound
+            if sparkle['x'] < 0:
+                sparkle['x'] = self.screen_width
+            elif sparkle['x'] > self.screen_width:
+                sparkle['x'] = 0
+            if sparkle['y'] < 0:
+                sparkle['y'] = self.screen_height
+            elif sparkle['y'] > self.screen_height:
+                sparkle['y'] = 0
+
+    def draw_animated_background(self):
+        """Dibujar fondo animado con efectos ambientales"""
+        
+        self.draw_gradient_background() # Fondo base con gradiente
+        self.draw_damaged_aurora() # Aurora dañada en la parte superior
+        self.draw_heat_waves() # Ondas de calor
+        self.draw_acid_rain() # Lluvia ácida
+        self.draw_pollution_particles() # Partículas de contaminación
+        self.draw_melting_ice() # Hielo derritiéndose
+        self.draw_hope_sparkles() # Chispas de esperanza
+        self.draw_particles() # Partículas atmosféricas originales
+
+    def draw_damaged_aurora(self):
+        """Dibujar aurora boreal dañada que parpadea"""
+        for aurora in self.aurora_strips:
+            # Calcular intensidad con parpadeo
+            flicker = math.sin(self.animation_time * 2 + aurora['color_shift']) * aurora['flicker_intensity']
+            base_alpha = int(30 + 25 * flicker)
+            
+            if base_alpha > 10:
+                # Colores de aurora dañada (rojizos y verdes tóxicos)
+                colors = [
+                    (255, 100, 100, base_alpha),  # Rojo tóxico
+                    (100, 255, 100, base_alpha),  # Verde ácido
+                    (150, 100, 255, base_alpha)   # Púrpura artificial
+                ]
+                
+                for i, color in enumerate(colors):
+                    # Crear superficie para transparencia
+                    aurora_surface = pygame.Surface((self.screen_width, 80), pygame.SRCALPHA)
+                    
+                    # Dibujar líneas onduladas
+                    points = []
+                    for j in range(len(aurora['points'])):
+                        x = aurora['points'][j][0] + 20 * math.sin(self.animation_time + j * 0.5)
+                        y = aurora['points'][j][1] + i * 15 + 10 * math.sin(self.animation_time * 1.5 + j)
+                        points.append((x, y))
+                    
+                    if len(points) > 2:
+                        pygame.draw.lines(aurora_surface, color, False, points, 3)
+                    
+                    self.screen.blit(aurora_surface, (0, 0))
+
+    def draw_heat_waves(self):
+        """Dibujar ondas de calor distorsionadas"""
+        for wave in self.heat_waves:
+            points = []
+            for x in range(0, self.screen_width, 10):
+                y_offset = wave['amplitude'] * math.sin(x * wave['frequency'] + wave['offset'])
+                points.append((x, wave['y'] + y_offset))
+            
+            if len(points) > 1:
+                # Dibujar ondas semitransparentes
+                wave_surface = pygame.Surface((self.screen_width, 4), pygame.SRCALPHA)
+                for i in range(len(points) - 1):
+                    alpha = int(40 + 20 * math.sin(self.animation_time * 2 + points[i][0] * 0.01))
+                    color = (255, 150, 50, alpha)  # Naranja cálido
+                    pygame.draw.line(wave_surface, color, points[i], points[i + 1], 2)
+                
+                self.screen.blit(wave_surface, (0, 0))
+
+    def draw_acid_rain(self):
+        """Dibujar lluvia ácida"""
+        for drop in self.acid_rain:
+            # Color amarillo-verde tóxico
+            color = (200, 255, 100)
+            start_pos = (int(drop['x']), int(drop['y']))
+            end_pos = (int(drop['x'] + drop['vel_x'] * 2), int(drop['y'] + drop['length']))
+            
+            if 0 <= start_pos[0] <= self.screen_width and 0 <= start_pos[1] <= self.screen_height:
+                pygame.draw.line(self.screen, color, start_pos, end_pos, 1)
+
+    def draw_pollution_particles(self):
+        """Dibujar partículas de contaminación"""
+        for particle in self.pollution_particles:
+            if particle['life'] > 0:
+                # Crear partícula de humo con transparencia
+                particle_surface = pygame.Surface((particle['size'] * 2, particle['size'] * 2), pygame.SRCALPHA)
+                
+                # Color gris/negro con transparencia
+                alpha = min(particle['alpha'], particle['life'] // 2)
+                color = (60, 60, 60, alpha)
+                
+                pygame.draw.circle(particle_surface, color, 
+                                 (particle['size'], particle['size']), particle['size'])
+                
+                self.screen.blit(particle_surface, 
+                               (particle['x'] - particle['size'], particle['y'] - particle['size']))
+
+    def draw_melting_ice(self):
+        """Dibujar hielo derritiéndose"""
+        for ice in self.melting_ice:
+            # Dibujar bloque de hielo (cada vez más pequeño)
+            ice_size = 20 + 10 * math.sin(self.animation_time * 0.5)
+            ice_color = (200, 230, 255, 150)
+            
+            ice_surface = pygame.Surface((ice_size, ice_size), pygame.SRCALPHA)
+            pygame.draw.rect(ice_surface, ice_color, (0, 0, ice_size, ice_size))
+            self.screen.blit(ice_surface, (ice['x'] - ice_size//2, ice['y'] - ice_size//2))
+            
+            # Dibujar gotas de agua cayendo
+            for drop in ice['drops']:
+                pygame.draw.circle(self.screen, (100, 150, 255), 
+                                 (int(drop['x']), int(drop['y'])), 2)
+
+    def draw_hope_sparkles(self):
+        """Dibujar chispas de esperanza (elementos verdes de vida)"""
+        for sparkle in self.hope_sparkles:
+            # Pulsación de brillo
+            pulse_factor = (math.sin(sparkle['pulse']) + 1) * 0.5
+            alpha = int(sparkle['color_intensity'] * pulse_factor)
+            
+            if alpha > 20:
+                # Crear estrella de esperanza
+                sparkle_surface = pygame.Surface((sparkle['size'] * 4, sparkle['size'] * 4), pygame.SRCALPHA)
+                
+                # Verde esperanzador
+                color = (50, 255, 100, alpha)
+                center = (sparkle['size'] * 2, sparkle['size'] * 2)
+                
+                # Dibujar como pequeña estrella
+                points = []
+                for i in range(8):
+                    angle = i * math.pi / 4
+                    if i % 2 == 0:
+                        radius = sparkle['size'] + 2
+                    else:
+                        radius = sparkle['size'] // 2
+                    
+                    x = center[0] + radius * math.cos(angle + sparkle['pulse'])
+                    y = center[1] + radius * math.sin(angle + sparkle['pulse'])
+                    points.append((x, y))
+                
+                if len(points) > 2:
+                    pygame.draw.polygon(sparkle_surface, color, points)
+                
+                self.screen.blit(sparkle_surface, 
+                               (sparkle['x'] - sparkle['size'] * 2, sparkle['y'] - sparkle['size'] * 2))
+
     def draw_gradient_background(self):
         """Dibujar fondo con gradiente dramático"""
         for y in range(self.screen_height):
@@ -150,7 +420,7 @@ class HockeyMainScreen:
             elif particle['x'].y > self.screen_height:
                 particle['x'].y = 0
             
-            # Dibujar partícula con efecto de brillo
+            # Dibujar partícula with efecto de brillo
             alpha = int(128 + 127 * math.sin(self.animation_time * 2 + particle['x'].x * 0.01))
             color = (*particle['color'], alpha)
             
@@ -162,40 +432,80 @@ class HockeyMainScreen:
     def draw_title(self):
         """Dibujar título principal del juego"""
         # Título principal con efecto de brillo
-        title_text = "HOCKEY ICE"
-        subtitle_text = "MELTING DOWN"
+        title_text = "HOCKEY IS MELTING DOWN"
+        subtitle_text = "Desafía a EcoNull y salva la Tierra"
         
         # Posición adaptativa
         title_y = 80 if not self.is_mobile else 50
         
-        # Efecto de brillo en el título
-        glow_offset = int(5 * math.sin(self.animation_time * 3))
+        # Calcular posición del subtítulo
+        subtitle_y = title_y + 40
+
+        # Efecto de brillo/titilación para el título
+        glow_intensity = abs(math.sin(self.animation_time * 4)) # Titilación más rápida
+        glow_surfaces = []
+        
+        # Crear capas de brillo con intensidad variable
+        for offset in range(3, 0, -1):
+            alpha = int(50 * glow_intensity) # La transparencia varía con la intensidad
+            glow_color = (100 + offset * 50, 150 + offset * 30, 255, alpha)
+            glow_surface = self.font_title.render(title_text, True, glow_color)
+            glow_rect = glow_surface.get_rect(center=(self.screen_width // 2, title_y))
+            glow_surfaces.append((glow_surface, glow_rect))
+
+        # Dibujar las capas de brillo
+        for glow_surface, glow_rect in glow_surfaces:
+            self.screen.blit(glow_surface, glow_rect)
         
         # Sombra del título
         title_shadow = self.font_title.render(title_text, True, (0, 0, 0))
         subtitle_shadow = self.font_subtitle.render(subtitle_text, True, (0, 0, 0))
         
         title_rect = title_shadow.get_rect(center=(self.screen_width // 2 + 2, title_y + 2))
-        subtitle_rect = subtitle_shadow.get_rect(center=(self.screen_width // 2 + 2, title_y + 50 + 2))
-        
+        subtitle_rect = subtitle_shadow.get_rect(center=(self.screen_width // 2 + 2, subtitle_y + 2))
+
         self.screen.blit(title_shadow, title_rect)
         self.screen.blit(subtitle_shadow, subtitle_rect)
         
+        # Color principal del título que también titila ligeramente
+        title_color = (
+            min(255, int(173 + 80 * glow_intensity)),  # Componente R
+            min(255, int(216 + 40 * glow_intensity)),  # Componente G
+            min(255, int(230 + 25 * glow_intensity))   # Componente B
+        )
+        
         # Título principal
-        title_surface = self.font_title.render(title_text, True, self.colors['ice_blue'])
+        title_surface = self.font_title.render(title_text, True, title_color)
         subtitle_surface = self.font_subtitle.render(subtitle_text, True, self.colors['critical_red'])
         
         title_rect = title_surface.get_rect(center=(self.screen_width // 2, title_y))
-        subtitle_rect = subtitle_surface.get_rect(center=(self.screen_width // 2, title_y + 50))
-        
+        subtitle_rect = subtitle_surface.get_rect(center=(self.screen_width // 2, subtitle_y))
+
         self.screen.blit(title_surface, title_rect)
         self.screen.blit(subtitle_surface, subtitle_rect)
         
         # Estado planetario crítico
-        status_text = "ESTADO PLANETARIO: CRÍTICO"
-        status_surface = self.font_text.render(status_text, True, self.colors['critical_red'])
-        status_rect = status_surface.get_rect(center=(self.screen_width // 2, title_y + 90))
-        self.screen.blit(status_surface, status_rect)
+        status_prefix = "ESTADO PLANETARIO: "
+        status_critical = "CRÍTICO"
+
+        # Renderizar "ESTADO PLANETARIO: "
+        prefix_surface = self.font_text.render(status_prefix, True, self.colors['critical_red'])
+        prefix_rect = prefix_surface.get_rect(center=(self.screen_width // 2 - 40, title_y + 90))
+        
+        # Renderizar "CRÍTICO" con efecto de brillo/fuego
+        glow_intensity = abs(math.sin(self.animation_time * 4))
+        critical_color = (
+            255,  # R - Rojo máximo
+            int(100 + 155 * glow_intensity),  # G - Amarillo variable
+            0    # B - Sin azul para efecto fuego
+        )
+        
+        critical_surface = self.font_text.render(status_critical, True, critical_color)
+        critical_rect = critical_surface.get_rect(midleft=(prefix_rect.right, prefix_rect.centery))
+        
+        # Dibujar ambas partes
+        self.screen.blit(prefix_surface, prefix_rect)
+        self.screen.blit(critical_surface, critical_rect)
     
     def draw_circular_button(self, button_key, icon_text, hover_text=""):
         """Dibujar botón circular con efectos"""
@@ -219,7 +529,7 @@ class HockeyMainScreen:
         
         # Dibujar círculo con borde
         pygame.draw.circle(self.screen, color, pos, current_radius)
-        pygame.draw.circle(self.screen, self.colors['text_white'], pos, current_radius, 3)
+        #pygame.draw.circle(self.screen, self.colors['text_white'], pos, current_radius, 3)
         
         # Dibujar icono/texto
         if button_key == 'play':
@@ -297,7 +607,7 @@ class HockeyMainScreen:
             return
         
         panel_width = 250 if not self.is_mobile else self.screen_width - 40
-        panel_height = 180 if not self.is_mobile else 150
+        panel_height = 210 if not self.is_mobile else 150
         panel_x = self.screen_width - panel_width - 20 if not self.is_mobile else 20
         panel_y = self.screen_height // 2 - 50 if not self.is_mobile else 20
         
@@ -353,7 +663,7 @@ class HockeyMainScreen:
         # Puntos GAIA
         points_text = f"Puntos Gaia: {self.game_data['player_points']}"
         points_surface = self.font_text.render(points_text, True, self.colors['text_gold'])
-        self.screen.blit(points_surface, (panel_x + 10, panel_y + panel_height - 25))
+        self.screen.blit(points_surface, (panel_x + panel_width - points_surface.get_width() - 10, panel_y + panel_height - 25))
     
     def draw_climate_warning(self):
         """Dibujar mensaje de advertencia climática en la parte inferior"""
@@ -368,15 +678,15 @@ class HockeyMainScreen:
         message_index = int(self.animation_time / 3) % len(warning_texts)
         current_message = warning_texts[message_index]
         
+        warning_font = pygame.font.Font(None, 22)
         # Fondo para el mensaje
-        warning_surface = self.font_text.render(current_message, True, self.colors['text_white'])
-        warning_rect = warning_surface.get_rect(center=(self.screen_width // 2, self.screen_height - 30))
+        warning_surface = warning_font.render(current_message, True, self.colors['text_white'])
+        warning_rect = warning_surface.get_rect(center=(self.screen_width // 2, self.screen_height - 50))
         
-        # Fondo con borde naranja
-        bg_rect = pygame.Rect(warning_rect.x - 10, warning_rect.y - 5, 
-                             warning_rect.width + 20, warning_rect.height + 10)
+        bg_rect = pygame.Rect(warning_rect.x - 15, warning_rect.y - 10,
+                            warning_rect.width + 30, warning_rect.height + 20)
         pygame.draw.rect(self.screen, self.colors['warning_orange'], bg_rect)
-        pygame.draw.rect(self.screen, self.colors['text_white'], bg_rect, 2)
+        pygame.draw.rect(self.screen, self.colors['text_white'], bg_rect, 3)
         
         self.screen.blit(warning_surface, warning_rect)
     
@@ -412,6 +722,9 @@ class HockeyMainScreen:
             dt = self.clock.tick(60) / 1000.0
             self.animation_time += dt
             
+            # Actualizar efectos ambientales
+            self.update_environmental_effects(dt)
+            
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -421,16 +734,13 @@ class HockeyMainScreen:
                         if action == 'start_game':
                             running = False  # Salir para iniciar el juego
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        running = False
-                    elif event.key == pygame.K_SPACE:
+                    if event.key == pygame.K_SPACE:
                         action = self.handle_click(self.buttons['play']['pos'])
                         if action == 'start_game':
                             running = False
             
-            # Dibujar todo
-            self.draw_gradient_background()
-            self.draw_particles()
+            # Dibujar todo con fondo animado
+            self.draw_animated_background()
             self.draw_title()
             
             # Dibujar botones con efectos hover
