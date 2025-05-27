@@ -1,155 +1,277 @@
 import pygame
 import sys
 import math
-import random
+import json
+import os, random
 
-# Inicializar Pygame
-pygame.init()
-pygame.mixer.init()
-
-# Configuración de pantalla
-SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 768
-FPS = 60
-
-# Colores temáticos ambientales
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-OCEAN_BLUE = (30, 130, 200)
-ICE_BLUE = (173, 216, 230)
-TOXIC_GREEN = (100, 200, 50)
-POLLUTION_GRAY = (80, 80, 80)
-FIRE_RED = (220, 50, 50)
-EARTH_BROWN = (139, 69, 19)
-SKY_BLUE = (135, 206, 235)
-GAIA_GREEN = (34, 139, 34)
-WARNING_ORANGE = (255, 140, 0)
-
-class EnvironmentalParticle:
-    """Partículas temáticas ambientales"""
-    def __init__(self, x, y, particle_type="ice"):
-        self.x = x
-        self.y = y
-        self.type = particle_type
-        self.speed = random.uniform(0.5, 2)
-        self.size = random.randint(2, 6)
-        self.angle = random.uniform(0, 2 * math.pi)
-        self.life = 255
-        self.decay = random.randint(1, 3)
+class HockeyMainScreen:
+    def __init__(self):
+        pygame.init()
         
-        # Colores según el tipo de partícula
-        if particle_type == "ice":
-            self.color = random.choice([ICE_BLUE, WHITE, (200, 230, 255)])
-        elif particle_type == "pollution":
-            self.color = random.choice([POLLUTION_GRAY, (60, 60, 60), (100, 100, 100)])
-        elif particle_type == "fire":
-            self.color = random.choice([FIRE_RED, WARNING_ORANGE, (255, 100, 0)])
-    
-    def update(self):
-        self.x += math.cos(self.angle) * self.speed
-        self.y += math.sin(self.angle) * self.speed * 0.5
-        self.life -= self.decay
-        if self.life < 0:
-            self.life = 0
-    
-    def draw(self, screen):
-        if self.life > 0:
-            alpha = max(0, self.life)
-            color_with_alpha = (*self.color[:3], alpha)
-            pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.size)
-
-class CircularButton:
-    """Botón circular temático"""
-    def __init__(self, x, y, radius, icon, color, hover_color, tooltip=""):
-        self.x = x
-        self.y = y
-        self.radius = radius
-        self.icon = icon
-        self.color = color
-        self.hover_color = hover_color
-        self.tooltip = tooltip
-        self.hovered = False
-        self.font = pygame.font.Font(None, 24)
-        self.icon_font = pygame.font.Font(None, 36)
-    
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEMOTION:
-            distance = math.sqrt((event.pos[0] - self.x)**2 + (event.pos[1] - self.y)**2)
-            self.hovered = distance <= self.radius
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            distance = math.sqrt((event.pos[0] - self.x)**2 + (event.pos[1] - self.y)**2)
-            if distance <= self.radius:
-                return True
-        return False
-    
-    def draw(self, screen):
-        color = self.hover_color if self.hovered else self.color
-        pygame.draw.circle(screen, color, (self.x, self.y), self.radius)
-        pygame.draw.circle(screen, WHITE, (self.x, self.y), self.radius, 3)
+        # Configuración de pantalla adaptativa
+        info = pygame.display.Info()
+        self.screen_width = min(1200, info.current_w - 100)
+        self.screen_height = min(800, info.current_h - 100)
         
-        # Dibujar icono
-        icon_surface = self.icon_font.render(self.icon, True, WHITE)
-        icon_rect = icon_surface.get_rect(center=(self.x, self.y))
-        screen.blit(icon_surface, icon_rect)
+        # Detectar si es formato móvil (relación de aspecto vertical)
+        self.is_mobile = self.screen_height > self.screen_width
         
-        # Tooltip
-        if self.hovered and self.tooltip:
-            tooltip_surface = self.font.render(self.tooltip, True, WHITE)
-            tooltip_rect = tooltip_surface.get_rect(center=(self.x, self.y + self.radius + 20))
-            pygame.draw.rect(screen, BLACK, tooltip_rect.inflate(10, 5))
-            screen.blit(tooltip_surface, tooltip_rect)
-
-class PlayButton:
-    """Botón de jugar central con diseño especial"""
-    def __init__(self, x, y, radius):
-        self.x = x
-        self.y = y
-        self.radius = radius
-        self.hovered = False
-        self.pulse = 0
-        self.font = pygame.font.Font(None, 48)
-    
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEMOTION:
-            distance = math.sqrt((event.pos[0] - self.x)**2 + (event.pos[1] - self.y)**2)
-            self.hovered = distance <= self.radius
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            distance = math.sqrt((event.pos[0] - self.x)**2 + (event.pos[1] - self.y)**2)
-            if distance <= self.radius:
-                return True
-        return False
-    
-    def update(self, time):
-        self.pulse = math.sin(time * 0.1) * 10
-    
-    def draw(self, screen):
-        # Efecto de pulso
-        current_radius = self.radius + (self.pulse if self.hovered else 0)
+        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+        pygame.display.set_caption("Hockey Ice Melting Down - Salva la Tierra")
         
-        # Círculo exterior (GaiaCore)
-        pygame.draw.circle(screen, GAIA_GREEN, (self.x, self.y), int(current_radius))
-        pygame.draw.circle(screen, WHITE, (self.x, self.y), int(current_radius), 4)
+        # Colores temáticos
+        self.colors = {
+            'bg_gradient_top': (25, 25, 80),      # Azul espacial oscuro
+            'bg_gradient_bottom': (120, 50, 50),   # Rojo apocalíptico
+            'ice_blue': (173, 216, 230),
+            'critical_red': (220, 50, 50),
+            'hope_green': (34, 139, 34),
+            'warning_orange': (255, 140, 0),
+            'text_white': (255, 255, 255),
+            'text_gold': (255, 215, 0),
+            'panel_dark': (20, 20, 40, 200),
+            'button_active': (0, 100, 200),
+            'button_hover': (0, 150, 255)
+        }
         
-        # Triángulo de play
-        triangle_size = current_radius // 3
-        points = [
-            (self.x + triangle_size//2, self.y),
-            (self.x - triangle_size//2, self.y - triangle_size//2),
-            (self.x - triangle_size//2, self.y + triangle_size//2)
+        # Fuentes
+        try:
+            self.font_title = pygame.font.Font(None, 48 if not self.is_mobile else 36)
+            self.font_subtitle = pygame.font.Font(None, 24 if not self.is_mobile else 20)
+            self.font_text = pygame.font.Font(None, 18 if not self.is_mobile else 16)
+            self.font_small = pygame.font.Font(None, 14 if not self.is_mobile else 12)
+        except:
+            self.font_title = pygame.font.SysFont('Arial', 48 if not self.is_mobile else 36, bold=True)
+            self.font_subtitle = pygame.font.SysFont('Arial', 24 if not self.is_mobile else 20, bold=True)
+            self.font_text = pygame.font.SysFont('Arial', 18 if not self.is_mobile else 16)
+            self.font_small = pygame.font.SysFont('Arial', 14 if not self.is_mobile else 12)
+        
+        # Estado del juego
+        self.game_data = {
+            'player_points': 1420,
+            'planetary_progress': {
+                'oceanos_limpiados': 12,
+                'ozono_restaurado': 8,
+                'aire_purificado': 6,
+                'bosques_replantados': 15,
+                'ciudades_enfriadas': 3
+            },
+            'levels_unlocked': 2,
+            'current_level': 1
+        }
+        
+        # Agentes enemigos
+        self.enemy_agents = [
+            {'name': 'SLICKWAVE', 'desc': 'Emperador del plástico\nInunda los océanos con desechos', 'unlocked': True, 'defeated': False},
+            {'name': 'UVBLADE', 'desc': 'Destructor del ozono\nHa perforado el escudo celestial', 'unlocked': True, 'defeated': False},
+            {'name': 'SMOGATRON', 'desc': 'Señor del smog\nAhoga las ciudades en niebla tóxica', 'unlocked': False, 'defeated': False},
+            {'name': 'DEFORESTIX', 'desc': 'Talador de raíces\nDevora los pulmones del planeta', 'unlocked': False, 'defeated': False},
+            {'name': 'HEATCORE', 'desc': 'Maestro del calor\nConvierte ciudades en hornos', 'unlocked': False, 'defeated': False}
         ]
-        pygame.draw.polygon(screen, WHITE, points)
-
-class LorePanel:
-    """Panel con información del lore"""
-    def __init__(self, x, y, width, height):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.font = pygame.font.Font(None, 24)
-        self.title_font = pygame.font.Font(None, 32)
-        self.scroll_offset = 0
         
-        self.lore_text = [
-            "GAIA CORE - SISTEMA DE RESTAURACIÓN",
-            "",
+        # Botones circulares
+        center_x = self.screen_width // 2
+        center_y = self.screen_height // 2
+        
+        if self.is_mobile:
+            # Disposición vertical para móvil
+            self.buttons = {
+                'play': {'pos': (center_x, center_y - 80), 'radius': 50, 'color': self.colors['hope_green']},
+                'history': {'pos': (center_x - 80, center_y + 40), 'radius': 30, 'color': self.colors['ice_blue']},
+                'player': {'pos': (center_x + 80, center_y + 40), 'radius': 30, 'color': self.colors['warning_orange']},
+                'settings': {'pos': (30, 30), 'radius': 20, 'color': self.colors['ice_blue']},
+                'help': {'pos': (self.screen_width - 30, 30), 'radius': 20, 'color': self.colors['ice_blue']}
+            }
+        else:
+            # Disposición para PC
+            self.buttons = {
+                'play': {'pos': (center_x, center_y), 'radius': 60, 'color': self.colors['hope_green']},
+                'history': {'pos': (center_x - 120, center_y), 'radius': 35, 'color': self.colors['ice_blue']},
+                'player': {'pos': (center_x + 120, center_y), 'radius': 35, 'color': self.colors['warning_orange']},
+                'background': {'pos': (center_x, center_y + 80), 'radius': 30, 'color': self.colors['button_active']},
+                'settings': {'pos': (40, 40), 'radius': 25, 'color': self.colors['ice_blue']},
+                'help': {'pos': (self.screen_width - 40, 40), 'radius': 25, 'color': self.colors['ice_blue']}
+            }
+        
+        # Animaciones
+        self.animation_time = 0
+        self.particles = []
+        self.create_particles()
+        
+        # Paneles
+        self.show_gaia_panel = False
+        self.show_progress_panel = True
+        
+        self.clock = pygame.time.Clock()
+        
+    def create_particles(self):
+        """Crear partículas ambientales para el efecto atmosférico"""
+        for _ in range(20):
+            self.particles.append({
+                'x': pygame.math.Vector2(
+                    random.randint(0, self.screen_width),
+                    random.randint(0, self.screen_height)
+                ),
+                'vel': pygame.math.Vector2(
+                    random.uniform(-0.5, 0.5),
+                    random.uniform(-0.5, 0.5)
+                ),
+                'size': random.randint(1, 3),
+                'color': random.choice([
+                    self.colors['ice_blue'],
+                    self.colors['warning_orange'],
+                    (100, 100, 150)
+                ])
+            })
+    
+    def draw_gradient_background(self):
+        """Dibujar fondo con gradiente dramático"""
+        for y in range(self.screen_height):
+            ratio = y / self.screen_height
+            color = [
+                int(self.colors['bg_gradient_top'][i] * (1 - ratio) + 
+                    self.colors['bg_gradient_bottom'][i] * ratio)
+                for i in range(3)
+            ]
+            pygame.draw.line(self.screen, color, (0, y), (self.screen_width, y))
+    
+    def draw_particles(self):
+        """Dibujar y animar partículas atmosféricas"""
+        for particle in self.particles:
+            particle['x'] += particle['vel']
+            
+            # Wraparound
+            if particle['x'].x < 0:
+                particle['x'].x = self.screen_width
+            elif particle['x'].x > self.screen_width:
+                particle['x'].x = 0
+            if particle['x'].y < 0:
+                particle['x'].y = self.screen_height
+            elif particle['x'].y > self.screen_height:
+                particle['x'].y = 0
+            
+            # Dibujar partícula con efecto de brillo
+            alpha = int(128 + 127 * math.sin(self.animation_time * 2 + particle['x'].x * 0.01))
+            color = (*particle['color'], alpha)
+            
+            # Crear superficie temporal para transparencia
+            temp_surface = pygame.Surface((particle['size'] * 2, particle['size'] * 2), pygame.SRCALPHA)
+            pygame.draw.circle(temp_surface, color, (particle['size'], particle['size']), particle['size'])
+            self.screen.blit(temp_surface, (particle['x'].x - particle['size'], particle['x'].y - particle['size']))
+    
+    def draw_title(self):
+        """Dibujar título principal del juego"""
+        # Título principal con efecto de brillo
+        title_text = "HOCKEY ICE"
+        subtitle_text = "MELTING DOWN"
+        
+        # Posición adaptativa
+        title_y = 80 if not self.is_mobile else 50
+        
+        # Efecto de brillo en el título
+        glow_offset = int(5 * math.sin(self.animation_time * 3))
+        
+        # Sombra del título
+        title_shadow = self.font_title.render(title_text, True, (0, 0, 0))
+        subtitle_shadow = self.font_subtitle.render(subtitle_text, True, (0, 0, 0))
+        
+        title_rect = title_shadow.get_rect(center=(self.screen_width // 2 + 2, title_y + 2))
+        subtitle_rect = subtitle_shadow.get_rect(center=(self.screen_width // 2 + 2, title_y + 50 + 2))
+        
+        self.screen.blit(title_shadow, title_rect)
+        self.screen.blit(subtitle_shadow, subtitle_rect)
+        
+        # Título principal
+        title_surface = self.font_title.render(title_text, True, self.colors['ice_blue'])
+        subtitle_surface = self.font_subtitle.render(subtitle_text, True, self.colors['critical_red'])
+        
+        title_rect = title_surface.get_rect(center=(self.screen_width // 2, title_y))
+        subtitle_rect = subtitle_surface.get_rect(center=(self.screen_width // 2, title_y + 50))
+        
+        self.screen.blit(title_surface, title_rect)
+        self.screen.blit(subtitle_surface, subtitle_rect)
+        
+        # Estado planetario crítico
+        status_text = "ESTADO PLANETARIO: CRÍTICO"
+        status_surface = self.font_text.render(status_text, True, self.colors['critical_red'])
+        status_rect = status_surface.get_rect(center=(self.screen_width // 2, title_y + 90))
+        self.screen.blit(status_surface, status_rect)
+    
+    def draw_circular_button(self, button_key, icon_text, hover_text=""):
+        """Dibujar botón circular con efectos"""
+        button = self.buttons[button_key]
+        pos = button['pos']
+        radius = button['radius']
+        color = button['color']
+        
+        # Efecto de pulsación
+        pulse = int(3 * math.sin(self.animation_time * 4))
+        current_radius = radius + pulse
+        
+        # Detectar hover
+        mouse_pos = pygame.mouse.get_pos()
+        distance = math.sqrt((mouse_pos[0] - pos[0])**2 + (mouse_pos[1] - pos[1])**2)
+        is_hover = distance <= radius
+        
+        if is_hover:
+            current_radius += 5
+            color = self.colors['button_hover']
+        
+        # Dibujar círculo con borde
+        pygame.draw.circle(self.screen, color, pos, current_radius)
+        pygame.draw.circle(self.screen, self.colors['text_white'], pos, current_radius, 3)
+        
+        # Dibujar icono/texto
+        if button_key == 'play':
+            # Triángulo de play
+            triangle_points = [
+                (pos[0] - 15, pos[1] - 20),
+                (pos[0] - 15, pos[1] + 20),
+                (pos[0] + 20, pos[1])
+            ]
+            pygame.draw.polygon(self.screen, self.colors['text_white'], triangle_points)
+        else:
+            # Texto del icono
+            icon_surface = self.font_text.render(icon_text, True, self.colors['text_white'])
+            icon_rect = icon_surface.get_rect(center=pos)
+            self.screen.blit(icon_surface, icon_rect)
+        
+        # Mostrar texto de hover
+        if is_hover and hover_text:
+            hover_surface = self.font_small.render(hover_text, True, self.colors['text_white'])
+            hover_rect = hover_surface.get_rect(center=(pos[0], pos[1] + radius + 20))
+            self.screen.blit(hover_surface, hover_rect)
+        
+        return is_hover
+    
+    def draw_gaia_panel(self):
+        """Dibujar panel de información de GAIA"""
+        if not self.show_gaia_panel:
+            return
+        
+        panel_width = 300 if not self.is_mobile else self.screen_width - 40
+        panel_height = 250 if not self.is_mobile else 200
+        panel_x = 20 if not self.is_mobile else 20
+        panel_y = self.screen_height // 2 - 50 if not self.is_mobile else self.screen_height // 2 + 50
+        
+        # Fondo del panel con transparencia
+        panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        panel_surface.fill(self.colors['panel_dark'])
+        self.screen.blit(panel_surface, (panel_x, panel_y))
+        
+        # Borde del panel
+        pygame.draw.rect(self.screen, self.colors['hope_green'], 
+                        (panel_x, panel_y, panel_width, panel_height), 2)
+        
+        # Título del panel
+        title = self.font_subtitle.render("ARCHIVO GAIA", True, self.colors['hope_green'])
+        self.screen.blit(title, (panel_x + 10, panel_y + 10))
+        
+        subtitle = self.font_text.render("GAIA CORE - SISTEMA DE RESTAURACIÓN", True, self.colors['text_white'])
+        self.screen.blit(subtitle, (panel_x + 10, panel_y + 35))
+        
+        # Descripción de la situación
+        situation_text = [
             "La Tierra agoniza. Los polos se derriten,",
             "los bosques desaparecen y las ciudades",
             "arden bajo olas de calor implacables.",
@@ -158,300 +280,181 @@ class LorePanel:
             "han tomado control del clima:",
             "",
             "🌊 SLICKWAVE - Emperador del plástico",
-            "   Inunda los océanos con desechos",
-            "",
-            "☀️ UVBLADE - Destructor del ozono", 
-            "   Ha perforado el escudo celestial",
-            "",
-            "💨 SMOGATRON - Señor de la niebla tóxica",
-            "   Asfixia las ciudades con veneno",
-            "",
-            "🌳 DEFORESTIX - Talador de raíces",
-            "   Devora los pulmones del planeta",
-            "",
-            "🔥 HEATCORE - Maestro del calor urbano",
-            "   Convierte las urbes en hornos",
-            "",
-            "Tu misión como último guardián:",
-            "Derrotar a cada agente en duelos",
-            "de hockey sobre hielo sagrado.",
-            "",
-            "Cada victoria restaura el equilibrio",
-            "y devuelve la esperanza a la Tierra."
+            "☀️ UVBLADE - Destructor del ozono"
         ]
+        
+        y_offset = 60
+        for line in situation_text:
+            if line.strip():
+                color = self.colors['text_gold'] if line.startswith(('🌊', '☀️')) else self.colors['text_white']
+                text_surface = self.font_small.render(line, True, color)
+                self.screen.blit(text_surface, (panel_x + 10, panel_y + y_offset))
+            y_offset += 18
     
-    def draw(self, screen):
-        # Fondo semi-transparente
-        pygame.draw.rect(screen, (0, 0, 0, 180), self.rect)
-        pygame.draw.rect(screen, GAIA_GREEN, self.rect, 2)
+    def draw_progress_panel(self):
+        """Dibujar panel de progreso planetario"""
+        if not self.show_progress_panel:
+            return
+        
+        panel_width = 250 if not self.is_mobile else self.screen_width - 40
+        panel_height = 180 if not self.is_mobile else 150
+        panel_x = self.screen_width - panel_width - 20 if not self.is_mobile else 20
+        panel_y = self.screen_height // 2 - 50 if not self.is_mobile else 20
+        
+        # Fondo del panel
+        panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        panel_surface.fill(self.colors['panel_dark'])
+        self.screen.blit(panel_surface, (panel_x, panel_y))
+        
+        # Borde del panel
+        pygame.draw.rect(self.screen, self.colors['ice_blue'], 
+                        (panel_x, panel_y, panel_width, panel_height), 2)
         
         # Título
-        title_surface = self.title_font.render("ARCHIVO GAIA", True, GAIA_GREEN)
-        title_rect = title_surface.get_rect(centerx=self.rect.centerx, y=self.rect.y + 10)
-        screen.blit(title_surface, title_rect)
+        title = self.font_subtitle.render("PROGRESO PLANETARIO", True, self.colors['ice_blue'])
+        self.screen.blit(title, (panel_x + 10, panel_y + 10))
         
-        # Texto del lore
-        y_offset = self.rect.y + 45
-        for line in self.lore_text:
-            if y_offset < self.rect.bottom - 20:
-                if line.startswith(("🌊", "☀️", "💨", "🌳", "🔥")):
-                    color = WARNING_ORANGE
-                elif line == "GAIA CORE - SISTEMA DE RESTAURACIÓN":
-                    color = GAIA_GREEN
-                else:
-                    color = WHITE
-                
-                text_surface = self.font.render(line, True, color)
-                screen.blit(text_surface, (self.rect.x + 10, y_offset))
-                y_offset += 25
-
-class ScorePanel:
-    """Panel de puntuación y estadísticas ambientales"""
-    def __init__(self, x, y, width, height):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.font = pygame.font.Font(None, 28)
-        self.small_font = pygame.font.Font(None, 20)
+        # Barras de progreso
+        progress_items = [
+            ("Océanos limpiados:", self.game_data['planetary_progress']['oceanos_limpiados'], self.colors['ice_blue']),
+            ("Ozono restaurado:", self.game_data['planetary_progress']['ozono_restaurado'], self.colors['warning_orange']),
+            ("Aire purificado:", self.game_data['planetary_progress']['aire_purificado'], self.colors['hope_green']),
+            ("Bosques replantados:", self.game_data['planetary_progress']['bosques_replantados'], self.colors['hope_green']),
+            ("Ciudades enfriadas:", self.game_data['planetary_progress']['ciudades_enfriadas'], self.colors['ice_blue'])
+        ]
         
-        # Estadísticas ambientales simuladas
-        self.stats = {
-            "Océanos limpiados": "12%",
-            "Ozono restaurado": "5%", 
-            "Aire purificado": "8%",
-            "Bosques replantados": "15%",
-            "Ciudades enfriadas": "3%",
-            "Puntos Gaia": "1,250"
-        }
-    
-    def draw(self, screen):
-        # Fondo
-        pygame.draw.rect(screen, (0, 50, 100, 200), self.rect)
-        pygame.draw.rect(screen, ICE_BLUE, self.rect, 2)
-        
-        # Título
-        title_surface = self.font.render("PROGRESO PLANETARIO", True, ICE_BLUE)
-        title_rect = title_surface.get_rect(centerx=self.rect.centerx, y=self.rect.y + 10)
-        screen.blit(title_surface, title_rect)
-        
-        # Estadísticas
-        y_offset = self.rect.y + 45
-        for stat, value in self.stats.items():
-            stat_surface = self.small_font.render(f"{stat}:", True, WHITE)
-            screen.blit(stat_surface, (self.rect.x + 10, y_offset))
+        y_offset = 40
+        for label, value, color in progress_items:
+            # Etiqueta
+            label_surface = self.font_small.render(f"{label}", True, self.colors['text_white'])
+            self.screen.blit(label_surface, (panel_x + 10, panel_y + y_offset))
             
-            value_surface = self.small_font.render(value, True, GAIA_GREEN)
-            value_rect = value_surface.get_rect(right=self.rect.right - 10, y=y_offset)
-            screen.blit(value_surface, value_rect)
+            # Valor porcentual
+            percent_surface = self.font_small.render(f"{value}%", True, color)
+            self.screen.blit(percent_surface, (panel_x + panel_width - 40, panel_y + y_offset))
+            
+            # Barra de progreso
+            bar_width = panel_width - 80
+            bar_height = 8
+            bar_x = panel_x + 10
+            bar_y = panel_y + y_offset + 15
+            
+            # Fondo de la barra
+            pygame.draw.rect(self.screen, (50, 50, 50), 
+                           (bar_x, bar_y, bar_width, bar_height))
+            
+            # Progreso
+            progress_width = int((value / 100) * bar_width)
+            pygame.draw.rect(self.screen, color, 
+                           (bar_x, bar_y, progress_width, bar_height))
             
             y_offset += 25
-
-class MainMenu:
-    """Clase principal del menú mejorado"""
-    def __init__(self):
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Hockey Ice Melting Down - Salva la Tierra")
-        self.clock = pygame.time.Clock()
         
-        self.state = "MAIN"
-        self.running = True
-        self.time = 0
-        
-        # Partículas ambientales por zonas
-        self.particles = []
-        self.create_environmental_particles()
-        
-        # Fuentes
-        self.title_font = pygame.font.Font(None, 64)
-        self.subtitle_font = pygame.font.Font(None, 32)
-        self.text_font = pygame.font.Font(None, 28)
-        
-        # Botón de jugar central
-        self.play_button = PlayButton(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50, 80)
-        
-        # Botones circulares temáticos
-        center_x, center_y = SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50
-        radius_distance = 150
-        
-        self.circular_buttons = [
-            CircularButton(center_x - radius_distance, center_y, 40, "🎵", OCEAN_BLUE, SKY_BLUE, "Música"),
-            CircularButton(center_x + radius_distance, center_y, 40, "❓", ICE_BLUE, WHITE, "Ayuda"),
-            CircularButton(center_x, center_y - radius_distance, 40, "👤", GAIA_GREEN, TOXIC_GREEN, "Perfil"),
-            CircularButton(center_x, center_y + radius_distance, 40, "⚙️", POLLUTION_GRAY, WHITE, "Config")
-        ]
-        
-        # Paneles informativos
-        self.lore_panel = LorePanel(50, 150, 300, 400)
-        self.score_panel = ScorePanel(SCREEN_WIDTH - 250, 150, 200, 300)
-        
-        # Sistema de mensajes ambientales
-        self.environmental_messages = [
+        # Puntos GAIA
+        points_text = f"Puntos Gaia: {self.game_data['player_points']}"
+        points_surface = self.font_text.render(points_text, True, self.colors['text_gold'])
+        self.screen.blit(points_surface, (panel_x + 10, panel_y + panel_height - 25))
+    
+    def draw_climate_warning(self):
+        """Dibujar mensaje de advertencia climática en la parte inferior"""
+        warning_texts = [
             "Los glaciares pierden 280 mil millones de toneladas anuales",
-            "Cada minuto desaparecen 40 campos de fútbol de bosque",
-            "8 millones de toneladas de plástico llegan al océano cada año",
-            "La temperatura global ha subido 1.1°C desde 1880",
-            "Solo el 3% del agua del planeta es dulce"
+            "La temperatura global ha aumentado 1.5°C desde 1880",
+            "El nivel del mar sube 3.3mm cada año",
+            "Quedan menos de 10 años para actuar"
         ]
-        self.current_message = 0
-        self.message_timer = 0
         
-    def create_environmental_particles(self):
-        # Zona izquierda: partículas de hielo
-        for _ in range(20):
-            x = random.randint(0, SCREEN_WIDTH//3)
-            y = random.randint(0, SCREEN_HEIGHT)
-            self.particles.append(EnvironmentalParticle(x, y, "ice"))
+        # Alternar mensajes cada 3 segundos
+        message_index = int(self.animation_time / 3) % len(warning_texts)
+        current_message = warning_texts[message_index]
         
-        # Zona derecha: partículas de contaminación
-        for _ in range(15):
-            x = random.randint(2*SCREEN_WIDTH//3, SCREEN_WIDTH)
-            y = random.randint(0, SCREEN_HEIGHT)
-            self.particles.append(EnvironmentalParticle(x, y, "pollution"))
+        # Fondo para el mensaje
+        warning_surface = self.font_text.render(current_message, True, self.colors['text_white'])
+        warning_rect = warning_surface.get_rect(center=(self.screen_width // 2, self.screen_height - 30))
         
-        # Zona superior: partículas de fuego
-        for _ in range(10):
-            x = random.randint(SCREEN_WIDTH//3, 2*SCREEN_WIDTH//3)
-            y = random.randint(0, SCREEN_HEIGHT//3)
-            self.particles.append(EnvironmentalParticle(x, y, "fire"))
+        # Fondo con borde naranja
+        bg_rect = pygame.Rect(warning_rect.x - 10, warning_rect.y - 5, 
+                             warning_rect.width + 20, warning_rect.height + 10)
+        pygame.draw.rect(self.screen, self.colors['warning_orange'], bg_rect)
+        pygame.draw.rect(self.screen, self.colors['text_white'], bg_rect, 2)
+        
+        self.screen.blit(warning_surface, warning_rect)
     
-    def handle_events(self):
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.running = False
-            
-            # Botón de jugar
-            if self.play_button.handle_event(event):
-                print("🌍 Iniciando misión de salvamento planetario...")
-                # Aquí iniciarías el primer nivel
-            
-            # Botones circulares
-            for i, button in enumerate(self.circular_buttons):
-                if button.handle_event(event):
-                    if i == 0:  # Música
-                        print("🎵 Configuración de audio")
-                    elif i == 1:  # Ayuda
-                        print("❓ Sistema de ayuda GaiaCore")
-                    elif i == 2:  # Perfil
-                        print("👤 Perfil del guardián")
-                    elif i == 3:  # Configuración
-                        print("⚙️ Configuración del sistema")
-    
-    def update(self):
-        self.time += 1
-        self.play_button.update(self.time)
-        
-        # Actualizar partículas ambientales
-        for particle in self.particles:
-            particle.update()
-            if particle.life <= 0 or particle.x < -50 or particle.x > SCREEN_WIDTH + 50:
-                # Regenerar partícula según zona
-                if particle.type == "ice":
-                    particle.x = random.randint(0, SCREEN_WIDTH//3)
-                elif particle.type == "pollution":
-                    particle.x = random.randint(2*SCREEN_WIDTH//3, SCREEN_WIDTH)
-                else:
-                    particle.x = random.randint(SCREEN_WIDTH//3, 2*SCREEN_WIDTH//3)
-                particle.y = random.randint(0, SCREEN_HEIGHT)
-                particle.life = 255
-        
-        # Cambiar mensaje ambiental
-        self.message_timer += 1
-        if self.message_timer > 300:  # 5 segundos a 60 FPS
-            self.current_message = (self.current_message + 1) % len(self.environmental_messages)
-            self.message_timer = 0
-    
-    def draw_background(self):
-        # Gradiente ambiental (cielo contaminado a océano)
-        for y in range(SCREEN_HEIGHT):
-            ratio = y / SCREEN_HEIGHT
-            if ratio < 0.3:  # Cielo contaminado
-                r = int(100 + (150 - 100) * (ratio / 0.3))
-                g = int(50 + (100 - 50) * (ratio / 0.3))
-                b = int(50 + (120 - 50) * (ratio / 0.3))
-            else:  # Océano
-                ocean_ratio = (ratio - 0.3) / 0.7
-                r = int(150 - 120 * ocean_ratio)
-                g = int(100 + 30 * ocean_ratio)
-                b = int(120 + 80 * ocean_ratio)
-            
-            pygame.draw.line(self.screen, (r, g, b), (0, y), (SCREEN_WIDTH, y))
-        
-        # Dibujar partículas ambientales
-        for particle in self.particles:
-            particle.draw(self.screen)
-    
-    def draw_main_interface(self):
-        self.draw_background()
-        
-        # Título principal con efecto de crisis
-        title_y = 80 + math.sin(self.time * 0.05) * 5
-        
-        # Sombra del título
-        shadow_surface = self.title_font.render("HOCKEY ICE", True, BLACK)
-        shadow_rect = shadow_surface.get_rect(center=(SCREEN_WIDTH//2 + 3, title_y + 3))
-        self.screen.blit(shadow_surface, shadow_rect)
-        
-        # Título principal
-        title_surface = self.title_font.render("HOCKEY ICE", True, ICE_BLUE)
-        title_rect = title_surface.get_rect(center=(SCREEN_WIDTH//2, title_y))
-        self.screen.blit(title_surface, title_rect)
-        
-        # Subtítulo con efecto de derretimiento
-        subtitle_surface = self.subtitle_font.render("MELTING DOWN", True, FIRE_RED)
-        subtitle_rect = subtitle_surface.get_rect(center=(SCREEN_WIDTH//2, title_y + 50))
-        self.screen.blit(subtitle_surface, subtitle_rect)
-        
-        # Mensaje de misión
-        mission_surface = self.text_font.render("ÚLTIMA ESPERANZA PARA SALVAR LA TIERRA", True, WARNING_ORANGE)
-        mission_rect = mission_surface.get_rect(center=(SCREEN_WIDTH//2, title_y + 85))
-        self.screen.blit(mission_surface, mission_rect)
-        
-        # Botón de jugar central
-        self.play_button.draw(self.screen)
-        
-        # Botones circulares
-        for button in self.circular_buttons:
-            button.draw(self.screen)
-        
-        # Paneles informativos
-        self.lore_panel.draw(self.screen)
-        self.score_panel.draw(self.screen)
-        
-        # Mensaje ambiental rotativo
-        message = self.environmental_messages[self.current_message]
-        alpha = 128 + int(127 * math.sin(self.time * 0.1))
-        
-        # Fondo del mensaje
-        message_surface = self.text_font.render(message, True, WHITE)
-        message_rect = message_surface.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 50))
-        
-        bg_rect = message_rect.inflate(20, 10)
-        pygame.draw.rect(self.screen, (0, 0, 0, alpha//2), bg_rect)
-        pygame.draw.rect(self.screen, WARNING_ORANGE, bg_rect, 2)
-        
-        self.screen.blit(message_surface, message_rect)
-        
-        # Indicador de estado planetario
-        health_text = "ESTADO PLANETARIO: CRÍTICO"
-        health_surface = pygame.font.Font(None, 24).render(health_text, True, FIRE_RED)
-        health_rect = health_surface.get_rect(topright=(SCREEN_WIDTH - 20, 20))
-        self.screen.blit(health_surface, health_rect)
-    
-    def draw(self):
-        self.draw_main_interface()
+    def handle_click(self, pos):
+        """Manejar clics en botones"""
+        for button_key, button in self.buttons.items():
+            distance = math.sqrt((pos[0] - button['pos'][0])**2 + (pos[1] - button['pos'][1])**2)
+            if distance <= button['radius']:
+                if button_key == 'play':
+                    print("Iniciando juego...")
+                    return 'start_game'
+                elif button_key == 'history':
+                    self.show_gaia_panel = not self.show_gaia_panel
+                elif button_key == 'player':
+                    print("Abriendo perfil de jugador...")
+                    return 'player_profile'
+                elif button_key == 'settings':
+                    print("Abriendo configuración...")
+                    return 'settings'
+                elif button_key == 'help':
+                    print("Abriendo ayuda...")
+                    return 'help'
+                elif button_key == 'background':
+                    print("Cambiar fondo temático...")
+                    return 'background'
+        return None
     
     def run(self):
-        print("🌍 Iniciando Hockey Ice Melting Down - Sistema GaiaCore activado")
-        print("🏒 Prepárate para salvar el planeta, guardián...")
+        """Bucle principal del menú"""
+        running = True
         
-        while self.running:
-            self.handle_events()
-            self.update()
-            self.draw()
+        while running:
+            dt = self.clock.tick(60) / 1000.0
+            self.animation_time += dt
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:  # Clic izquierdo
+                        action = self.handle_click(event.pos)
+                        if action == 'start_game':
+                            running = False  # Salir para iniciar el juego
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
+                    elif event.key == pygame.K_SPACE:
+                        action = self.handle_click(self.buttons['play']['pos'])
+                        if action == 'start_game':
+                            running = False
+            
+            # Dibujar todo
+            self.draw_gradient_background()
+            self.draw_particles()
+            self.draw_title()
+            
+            # Dibujar botones con efectos hover
+            self.draw_circular_button('play', '▶', "Comenzar Misión")
+            self.draw_circular_button('history', '📜', "Historial de Partidas")
+            self.draw_circular_button('player', '👤', "Personalizar Jugador")
+            self.draw_circular_button('settings', '⚙', "Configuración")
+            self.draw_circular_button('help', '?', "Ayuda")
+            
+            if not self.is_mobile:
+                self.draw_circular_button('background', '🎨', "Fondo Temático")
+            
+            # Dibujar paneles informativos
+            self.draw_gaia_panel()
+            self.draw_progress_panel()
+            self.draw_climate_warning()
+            
             pygame.display.flip()
-            self.clock.tick(FPS)
         
         pygame.quit()
-        sys.exit()
+        return "start_game"
 
+# Ejecutar el menú principal
 if __name__ == "__main__":
-    game = MainMenu()
-    game.run()
+    main_screen = HockeyMainScreen()
+    result = main_screen.run()
+    print(f"Resultado: {result}")
