@@ -108,9 +108,9 @@ class HockeyMainScreen:
             # Disposición para PC
             self.buttons = {
                 'play': {'pos': (center_x, center_y), 'radius': 300, 'color': self.colors['hope_green']},
-                'history': {'pos': (center_x - 420, center_y), 'radius': 120, 'color': self.colors['ice_blue']},
-                'player': {'pos': (center_x + 420, center_y), 'radius': 120, 'color': self.colors['warning_orange']},
-                'background': {'pos': (center_x, center_y + 120), 'radius': 30, 'color': self.colors['button_active']},
+                'history': {'pos': (center_x - 220, center_y), 'radius': 120, 'color': self.colors['ice_blue']},
+                'player': {'pos': (center_x + 220, center_y), 'radius': 120, 'color': self.colors['warning_orange']},
+                #'background': {'pos': (center_x, center_y + 120), 'radius': 30, 'color': self.colors['button_active']},
                 'settings': {'pos': (40, 40), 'radius': 80, 'color': self.colors['ice_blue']},
                 'help': {'pos': (self.screen_width - 40, 40), 'radius': 80, 'color': self.colors['ice_blue']}
             }
@@ -685,6 +685,8 @@ class HockeyMainScreen:
         draw_button = Button(button_key, (radius, radius), pos)
         draw_button.draw(self.screen)
         is_hovered = draw_button.is_hovered()
+
+        self.buttons[button_key]['object'] = draw_button
         
         # Mostrar texto de hover
         if is_hovered and hover_text:
@@ -834,7 +836,7 @@ class HockeyMainScreen:
         """Manejar clics en botones del menú principal"""
         for button_key, button in self.buttons.items():
             distance = math.sqrt((pos[0] - button['pos'][0])**2 + (pos[1] - button['pos'][1])**2)
-            if distance <= button['radius']:
+            if button['object'].is_clicked(pos):
                 if button_key == 'play':
                     print("Iniciando juego...")
                     
@@ -896,13 +898,13 @@ class HockeyMainScreen:
                             if action == 'start_game':
                                 running = False
                 
-                elif self.current_screen == "profiles":
+                """ elif self.current_screen == "profiles":
                     ui_elements = self.draw_profiles_screen()
                     self.handle_profiles_events(event, ui_elements)
                     
                 elif self.current_screen == "create_profile":
                     ui_elements = self.draw_create_profile_screen()
-                    self.handle_create_profile_events(event, ui_elements)
+                    self.handle_create_profile_events(event, ui_elements) """
             
             # Dibujar según la pantalla current_screen
             if self.current_screen == "main":
