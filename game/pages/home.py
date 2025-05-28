@@ -3,6 +3,11 @@ import sys
 import math
 import json
 import os, random
+from datetime import datetime
+import time
+
+from ..config.save_system import GameSaveSystem
+from ..components.Button import Button
 
 class HockeyMainScreen:
     def __init__(self):
@@ -19,9 +24,26 @@ class HockeyMainScreen:
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         pygame.display.set_caption("Hockey Is Melting Down - Salva la Tierra")
         
+        # Cargar imagen de fondo
+        self.background_image = pygame.image.load('game/assets/background.png')
+        self.background_opacity = 200  # 0-255, donde 255 es completamente opaco
+        
+        # Inicializar sistema de guardado
+        self.save_system = GameSaveSystem()
+        
+        # Estado de interfaz
+        self.current_screen = "main"  # main, profiles, create_profile, settings
+        self.profiles = []
+        self.selected_profile_index = -1
+        self.input_text = ""
+        self.input_active = False
+        self.error_message = ""
+        self.success_message = ""
+        self.message_time = 0
+        
         # Colores temáticos
         self.colors = {
-            'bg_gradient_top': (25, 25, 80),      # Azul espacial oscuro
+            'bg_gradient_top': (173, 216, 230),      # Azul espacial claro (hielo)
             'bg_gradient_bottom': (120, 50, 50),   # Rojo apocalíptico
             'ice_blue': (173, 216, 230),
             'critical_red': (220, 50, 50),
@@ -46,7 +68,7 @@ class HockeyMainScreen:
             self.font_text = pygame.font.SysFont('Arial', 18 if not self.is_mobile else 16)
             self.font_small = pygame.font.SysFont('Arial', 14 if not self.is_mobile else 12)
         
-        # Estado del juego
+        # Estado del juego - Ahora se cargará desde el perfil
         self.game_data = {
             'player_points': 1420,
             'planetary_progress': {
@@ -76,21 +98,21 @@ class HockeyMainScreen:
         if self.is_mobile:
             # Disposición vertical para móvil
             self.buttons = {
-                'play': {'pos': (center_x, center_y - 80), 'radius': 50, 'color': self.colors['hope_green']},
+                'play': {'pos': (center_x, center_y - 80), 'radius': 100, 'color': self.colors['hope_green']},
                 'history': {'pos': (center_x - 80, center_y + 40), 'radius': 30, 'color': self.colors['ice_blue']},
                 'player': {'pos': (center_x + 80, center_y + 40), 'radius': 30, 'color': self.colors['warning_orange']},
-                'settings': {'pos': (30, 30), 'radius': 20, 'color': self.colors['ice_blue']},
-                'help': {'pos': (self.screen_width - 30, 30), 'radius': 20, 'color': self.colors['ice_blue']}
+                'settings': {'pos': (30, 30), 'radius': 30, 'color': self.colors['ice_blue']},
+                'help': {'pos': (self.screen_width - 30, 30), 'radius': 30, 'color': self.colors['ice_blue']}
             }
         else:
             # Disposición para PC
             self.buttons = {
-                'play': {'pos': (center_x, center_y), 'radius': 60, 'color': self.colors['hope_green']},
-                'history': {'pos': (center_x - 120, center_y), 'radius': 35, 'color': self.colors['ice_blue']},
-                'player': {'pos': (center_x + 120, center_y), 'radius': 35, 'color': self.colors['warning_orange']},
+                'play': {'pos': (center_x, center_y), 'radius': 300, 'color': self.colors['hope_green']},
+                'history': {'pos': (center_x - 420, center_y), 'radius': 120, 'color': self.colors['ice_blue']},
+                'player': {'pos': (center_x + 420, center_y), 'radius': 120, 'color': self.colors['warning_orange']},
                 'background': {'pos': (center_x, center_y + 120), 'radius': 30, 'color': self.colors['button_active']},
-                'settings': {'pos': (40, 40), 'radius': 25, 'color': self.colors['ice_blue']},
-                'help': {'pos': (self.screen_width - 40, 40), 'radius': 25, 'color': self.colors['ice_blue']}
+                'settings': {'pos': (40, 40), 'radius': 80, 'color': self.colors['ice_blue']},
+                'help': {'pos': (self.screen_width - 40, 40), 'radius': 80, 'color': self.colors['ice_blue']}
             }
         
         # Animaciones
@@ -111,8 +133,144 @@ class HockeyMainScreen:
         self.show_gaia_panel = False
         self.show_progress_panel = True
         
-        self.clock = pygame.time.Clock()
+        # Cargar perfiles al iniciar
+        self.load_profiles()
         
+        self.clock = pygame.time.Clock()
+    
+    def load_profiles(self):
+        """Carga la lista de perfiles disponibles"""
+        self.profiles = self.save_system.get_all_profiles()
+        
+        # Si hay perfiles disponibles, pre-seleccionar el primero (el más reciente)
+        if self.profiles:
+            self.selected_profile_index = 0
+    
+    def load_selected_profile(self):
+        """Carga el perfil seleccionado"""
+        if 0 <= self.selected_profile_index < len(self.profiles):
+            profile_id = self.profiles[self.selected_profile_index]["profile_id"]
+            profile = self.save_system.load_profile(profile_id)
+            
+            if profile:
+                # Actualizar datos del juego con el perfil
+                self.game_data = {
+                    'player_points': profile["total_points"],
+                    'planetary_progress': profile["planetary_progress"],
+                    'levels_unlocked': profile["levels"]["unlocked"],
+                    'current_level': profile["levels"]["current"]
+                }
+                
+                # Actualizar estado de enemigos
+                for enemy in self.enemy_agents:
+                    enemy["defeated"] = enemy["name"] in profile["enemies_defeated"]
+                    # Desbloquear enemigos según nivel
+                    if self.game_data['levels_unlocked'] >= self.enemy_agents.index(enemy) + 1:
+                        enemy["unlocked"] = True
+                
+                self.success_message = f"¡Bienvenido de vuelta, {profile['player_name']}!"
+                self.message_time = time.time()
+                
+                # Volver al menú principal
+                self.current_screen = "main"
+                return True
+            else:
+                self.error_message = "Error al cargar el perfil."
+                self.message_time = time.time()
+                return False
+        return False
+    
+    def create_new_profile(self):
+        """Crea un nuevo perfil con el nombre ingresado"""
+        if not self.input_text.strip():
+            self.error_message = "Por favor ingresa un nombre de jugador."
+            self.message_time = time.time()
+            return False
+            
+        name = self.input_text.strip()
+        profile_id = self.save_system.create_profile(name)
+        
+        if profile_id:
+            # Reiniciar datos del juego para el nuevo perfil
+            profile = self.save_system.get_current_profile_data()
+            self.game_data = {
+                'player_points': 0,
+                'planetary_progress': profile["planetary_progress"],
+                'levels_unlocked': 1,
+                'current_level': 1
+            }
+            
+            # Restablecer estado de enemigos
+            for enemy in self.enemy_agents:
+                enemy["defeated"] = False
+                enemy["unlocked"] = enemy == self.enemy_agents[0]  # Solo el primero desbloqueado
+            
+            self.success_message = f"¡Perfil creado! Bienvenido, {name}."
+            self.message_time = time.time()
+            
+            # Actualizar lista de perfiles
+            self.load_profiles()
+            
+            # Volver al menú principal
+            self.current_screen = "main"
+            return True
+        else:
+            self.error_message = "Error al crear el perfil."
+            self.message_time = time.time()
+            return False
+    
+    def delete_selected_profile(self):
+        """Elimina el perfil seleccionado"""
+        if 0 <= self.selected_profile_index < len(self.profiles):
+            profile_id = self.profiles[self.selected_profile_index]["profile_id"]
+            if self.save_system.delete_profile(profile_id):
+                self.success_message = "Perfil eliminado."
+                self.message_time = time.time()
+                
+                # Actualizar lista
+                self.load_profiles()
+                
+                # Resetear selección
+                self.selected_profile_index = 0 if self.profiles else -1
+                return True
+            else:
+                self.error_message = "Error al eliminar el perfil."
+                self.message_time = time.time()
+        return False
+    
+    def save_game_progress(self):
+        """Guarda el progreso actual del juego"""
+        if not self.save_system.current_profile:
+            self.error_message = "No hay un perfil activo para guardar."
+            self.message_time = time.time()
+            return False
+            
+        # Preparar datos a guardar
+        game_data = {
+            "points": self.game_data['player_points'],
+            "planetary_progress": self.game_data['planetary_progress'],
+            "level_completed": self.game_data['current_level'] - 1,  # El nivel actual ya está completado
+            "stats": {
+                "games_played": 1,
+                "time_played": 60  # Ejemplo: 60 segundos de juego
+            }
+        }
+        
+        # Si hay enemigos derrotados, añadirlos
+        for enemy in self.enemy_agents:
+            if enemy["defeated"]:
+                game_data["enemy_defeated"] = enemy["name"]
+                break
+        
+        if self.save_system.update_game_progress(game_data):
+            self.success_message = "¡Progreso guardado!"
+            self.message_time = time.time()
+            return True
+        else:
+            self.error_message = "Error al guardar el progreso."
+            self.message_time = time.time()
+            return False
+    
     def create_particles(self):
         """Crear partículas ambientales para el efecto atmosférico"""
         for _ in range(20):
@@ -258,14 +416,24 @@ class HockeyMainScreen:
     def draw_animated_background(self):
         """Dibujar fondo animado con efectos ambientales"""
         
-        self.draw_gradient_background() # Fondo base con gradiente
-        self.draw_damaged_aurora() # Aurora dañada en la parte superior
-        self.draw_heat_waves() # Ondas de calor
-        self.draw_acid_rain() # Lluvia ácida
-        self.draw_pollution_particles() # Partículas de contaminación
-        self.draw_melting_ice() # Hielo derritiéndose
-        self.draw_hope_sparkles() # Chispas de esperanza
-        self.draw_particles() # Partículas atmosféricas originales
+        # Dibujar el gradiente base
+        self.draw_gradient_background()
+        
+        # Dibujar la imagen de fondo con transparencia
+        if self.background_image:
+            # Crear una copia de la imagen con la opacidad deseada
+            temp_image = self.background_image.copy()
+            temp_image.set_alpha(self.background_opacity)
+            self.screen.blit(temp_image, (0, 0))
+        
+        # Continuar con los efectos animados
+        self.draw_damaged_aurora()
+        self.draw_heat_waves()
+        self.draw_acid_rain()
+        self.draw_pollution_particles()
+        self.draw_melting_ice()
+        self.draw_hope_sparkles()
+        self.draw_particles()
 
     def draw_damaged_aurora(self):
         """Dibujar aurora boreal dañada que parpadea"""
@@ -436,7 +604,7 @@ class HockeyMainScreen:
         subtitle_text = "Desafía a EcoNull y salva la Tierra"
         
         # Posición adaptativa
-        title_y = 80 if not self.is_mobile else 50
+        title_y = 100 if not self.is_mobile else 70
         
         # Calcular posición del subtítulo
         subtitle_y = title_y + 40
@@ -513,47 +681,19 @@ class HockeyMainScreen:
         pos = button['pos']
         radius = button['radius']
         color = button['color']
-        
-        # Efecto de pulsación
-        pulse = int(3 * math.sin(self.animation_time * 4))
-        current_radius = radius + pulse
-        
-        # Detectar hover
-        mouse_pos = pygame.mouse.get_pos()
-        distance = math.sqrt((mouse_pos[0] - pos[0])**2 + (mouse_pos[1] - pos[1])**2)
-        is_hover = distance <= radius
-        
-        if is_hover:
-            current_radius += 5
-            color = self.colors['button_hover']
-        
-        # Dibujar círculo con borde
-        pygame.draw.circle(self.screen, color, pos, current_radius)
-        #pygame.draw.circle(self.screen, self.colors['text_white'], pos, current_radius, 3)
-        
-        # Dibujar icono/texto
-        if button_key == 'play':
-            # Triángulo de play
-            triangle_points = [
-                (pos[0] - 15, pos[1] - 20),
-                (pos[0] - 15, pos[1] + 20),
-                (pos[0] + 20, pos[1])
-            ]
-            pygame.draw.polygon(self.screen, self.colors['text_white'], triangle_points)
-        else:
-            # Texto del icono
-            icon_surface = self.font_text.render(icon_text, True, self.colors['text_white'])
-            icon_rect = icon_surface.get_rect(center=pos)
-            self.screen.blit(icon_surface, icon_rect)
+
+        draw_button = Button(button_key, (radius, radius), pos)
+        draw_button.draw(self.screen)
+        is_hovered = draw_button.is_hovered()
         
         # Mostrar texto de hover
-        if is_hover and hover_text:
+        if is_hovered and hover_text:
             hover_surface = self.font_small.render(hover_text, True, self.colors['text_white'])
-            hover_rect = hover_surface.get_rect(center=(pos[0], pos[1] + radius + 20))
+            hover_rect = hover_surface.get_rect(center=(pos[0], pos[1] + radius + 10))
             self.screen.blit(hover_surface, hover_rect)
-        
-        return is_hover
-    
+
+        return is_hovered
+
     def draw_gaia_panel(self):
         """Dibujar panel de información de GAIA"""
         if not self.show_gaia_panel:
@@ -691,18 +831,27 @@ class HockeyMainScreen:
         self.screen.blit(warning_surface, warning_rect)
     
     def handle_click(self, pos):
-        """Manejar clics en botones"""
+        """Manejar clics en botones del menú principal"""
         for button_key, button in self.buttons.items():
             distance = math.sqrt((pos[0] - button['pos'][0])**2 + (pos[1] - button['pos'][1])**2)
             if distance <= button['radius']:
                 if button_key == 'play':
                     print("Iniciando juego...")
+                    
+                    # Verificar si hay un perfil activo
+                    if not self.save_system.current_profile:
+                        self.current_screen = "profiles"
+                        self.error_message = "Selecciona o crea un perfil para jugar"
+                        self.message_time = time.time()
+                        return None
+                    
                     return 'start_game'
                 elif button_key == 'history':
                     self.show_gaia_panel = not self.show_gaia_panel
                 elif button_key == 'player':
                     print("Abriendo perfil de jugador...")
-                    return 'player_profile'
+                    self.current_screen = "profiles"
+                    return None
                 elif button_key == 'settings':
                     print("Abriendo configuración...")
                     return 'settings'
@@ -710,8 +859,10 @@ class HockeyMainScreen:
                     print("Abriendo ayuda...")
                     return 'help'
                 elif button_key == 'background':
-                    print("Cambiar fondo temático...")
-                    return 'background'
+                    # Cambiar la opacidad del fondo al hacer clic
+                    self.background_opacity = (self.background_opacity + 50) % 256
+                    print(f"Cambiando opacidad del fondo a: {self.background_opacity}")
+                    return None
         return None
     
     def run(self):
@@ -728,43 +879,71 @@ class HockeyMainScreen:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:  # Clic izquierdo
-                        action = self.handle_click(event.pos)
-                        if action == 'start_game':
-                            running = False  # Salir para iniciar el juego
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE:
-                        action = self.handle_click(self.buttons['play']['pos'])
-                        if action == 'start_game':
-                            running = False
+                
+                # Manejo de eventos según la pantalla actual
+                if self.current_screen == "main":
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        if event.button == 1:  # Clic izquierdo
+                            action = self.handle_click(event.pos)
+                            if action == 'start_game':
+                                # Guardar último acceso antes de iniciar el juego
+                                if self.save_system.current_profile:
+                                    self.save_system.save_current_profile()
+                                running = False  # Salir para iniciar el juego
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_SPACE:
+                            action = self.handle_click(self.buttons['play']['pos'])
+                            if action == 'start_game':
+                                running = False
+                
+                elif self.current_screen == "profiles":
+                    ui_elements = self.draw_profiles_screen()
+                    self.handle_profiles_events(event, ui_elements)
+                    
+                elif self.current_screen == "create_profile":
+                    ui_elements = self.draw_create_profile_screen()
+                    self.handle_create_profile_events(event, ui_elements)
             
-            # Dibujar todo con fondo animado
-            self.draw_animated_background()
-            self.draw_title()
+            # Dibujar según la pantalla current_screen
+            if self.current_screen == "main":
+                # Dibujar pantalla principal
+                self.draw_animated_background()
+                self.draw_title()
+                
+                # Dibujar botones with efectos hover
+                self.draw_circular_button('play', '▶', "Comenzar Misión")
+                self.draw_circular_button('history', '📜', "Historial de Partidas")
+                self.draw_circular_button('player', '👤', "Personalizar Jugador")
+                self.draw_circular_button('settings', '⚙', "Configuración")
+                self.draw_circular_button('help', '?', "Ayuda")
+                
+                if not self.is_mobile:
+                    #self.draw_circular_button('background', '🎨', "Fondo Temático")
+                    pass
+                
+                # Dibujar paneles informativos
+                self.draw_gaia_panel()
+                self.draw_progress_panel()
+                self.draw_climate_warning()
+                
+                # Mostrar mensaje del perfil activo
+                if self.save_system.current_profile:
+                    profile_name = self.save_system.current_profile["player_name"]
+                    profile_text = f"Perfil: {profile_name}"
+                    profile_surface = self.font_text.render(profile_text, True, self.colors['text_gold'])
+                    self.screen.blit(profile_surface, (10, 10))
+                
+            """  elif self.current_screen == "profiles":
+                self.draw_profiles_screen()
+                
+            elif self.current_screen == "create_profile":
+                self.draw_create_profile_screen() """
             
-            # Dibujar botones con efectos hover
-            self.draw_circular_button('play', '▶', "Comenzar Misión")
-            self.draw_circular_button('history', '📜', "Historial de Partidas")
-            self.draw_circular_button('player', '👤', "Personalizar Jugador")
-            self.draw_circular_button('settings', '⚙', "Configuración")
-            self.draw_circular_button('help', '?', "Ayuda")
+            # Mostrar mensajes generales
             
-            if not self.is_mobile:
-                self.draw_circular_button('background', '🎨', "Fondo Temático")
-            
-            # Dibujar paneles informativos
-            self.draw_gaia_panel()
-            self.draw_progress_panel()
-            self.draw_climate_warning()
             
             pygame.display.flip()
         
         pygame.quit()
         return "start_game"
 
-# Ejecutar el menú principal
-if __name__ == "__main__":
-    main_screen = HockeyMainScreen()
-    result = main_screen.run()
-    print(f"Resultado: {result}")
