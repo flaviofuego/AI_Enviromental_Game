@@ -838,7 +838,7 @@ class HockeyMainScreen:
             distance = math.sqrt((pos[0] - button['pos'][0])**2 + (pos[1] - button['pos'][1])**2)
             if button['object'].is_clicked(pos):
                 if button_key == 'play':
-                    print("Iniciando juego...")
+                    print("Iniciando selección de niveles...")
                     
                     # Verificar si hay un perfil activo
                     if not self.save_system.current_profile:
@@ -847,7 +847,7 @@ class HockeyMainScreen:
                         self.message_time = time.time()
                         return None
                     
-                    return 'start_game'
+                    return 'level_select'  # Cambiado de 'start_game' a 'level_select'
                 elif button_key == 'history':
                     self.show_gaia_panel = not self.show_gaia_panel
                 elif button_key == 'player':
@@ -866,10 +866,11 @@ class HockeyMainScreen:
                     print(f"Cambiando opacidad del fondo a: {self.background_opacity}")
                     return None
         return None
-    
+
     def run(self):
         """Bucle principal del menú"""
         running = True
+        result = None
         
         while running:
             dt = self.clock.tick(60) / 1000.0
@@ -881,21 +882,24 @@ class HockeyMainScreen:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                    result = "exit"  # Añadido para señalar salida del juego
                 
                 # Manejo de eventos según la pantalla actual
                 if self.current_screen == "main":
                     if event.type == pygame.MOUSEBUTTONDOWN:
                         if event.button == 1:  # Clic izquierdo
                             action = self.handle_click(event.pos)
-                            if action == 'start_game':
-                                # Guardar último acceso antes de iniciar el juego
+                            if action == 'level_select':  # Cambiado para manejar transición a selección de niveles
+                                # Guardar último acceso antes de cambiar de pantalla
                                 if self.save_system.current_profile:
                                     self.save_system.save_current_profile()
-                                running = False  # Salir para iniciar el juego
+                                result = action
+                                running = False
                     elif event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_SPACE:
                             action = self.handle_click(self.buttons['play']['pos'])
-                            if action == 'start_game':
+                            if action == 'level_select':  # Cambiado para manejar transición a selección de niveles
+                                result = action
                                 running = False
                 
                 """ elif self.current_screen == "profiles":
@@ -946,6 +950,5 @@ class HockeyMainScreen:
             
             pygame.display.flip()
         
-        pygame.quit()
-        return "start_game"
+        return result if result else "exit"  # Aseguramos que siempre devuelva un valor
 
