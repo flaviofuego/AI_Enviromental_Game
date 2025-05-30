@@ -1,0 +1,30 @@
+{
+    "model_path": "improved_models\\quick_fixed_model_final.zip",
+    "analysis_date": "20250529_214454",
+    "num_episodes": 100,
+    "win_rate": 76.0,
+    "avg_reward": 1940.8097871244995,
+    "std_reward": 1757.7326016998684,
+    "avg_goals_scored": 0.76,
+    "avg_goals_conceded": 0.0,
+    "avg_hits": 22.3,
+    "action_distribution": {
+        "up": 72330,
+        "down": 67636,
+        "left": 0,
+        "right": 0,
+        "stay": 0
+    },
+    "vertical_movement_percentage": 100.0,
+    "movement_efficiency": {
+        "avg_velocity": 9.47978779689131,
+        "std_velocity": 2.2206983799750253,
+        "max_velocity": 10.0,
+        "stationary_percentage": 5.202122031086898
+    },
+    "positioning_quality": {
+        "avg_distance_to_puck": 168.93565519148117,
+        "defensive_time_percentage": 78.46334109712359,
+        "offensive_time_percentage": 21.53665890287641
+    }
+}
