@@ -6,6 +6,7 @@ import time
 
 from ..config.save_system import GameSaveSystem
 from ..components.Button import Button
+from ..components.LevelThumbnail import LevelThumbnail
 
 class LevelSelectScreen:
     def __init__(self, save_system=None, screen=None):
@@ -28,6 +29,15 @@ class LevelSelectScreen:
             self.screen_width = screen.get_width()
             self.screen_height = screen.get_height()
             self.is_mobile = self.screen_height > self.screen_width
+        
+        # Cargar imagen de fondo
+        try:
+            self.background_image = pygame.image.load('game/assets/niveles/background_levels.png')
+            self.background_image = pygame.transform.scale(self.background_image, (self.screen_width, self.screen_height))
+            self.background_opacity = 200  # 0-255, donde 255 es completamente opaco
+        except (pygame.error, FileNotFoundError):
+            print("No se pudo cargar el fondo del menú de niveles")
+            self.background_image = None
         
         # Cargar sistema de guardado (o usar el proporcionado)
         if save_system:
@@ -178,6 +188,11 @@ class LevelSelectScreen:
         # Actualizar estado de los niveles según perfil
         self.load_levels_status()
         
+        # Inicializar miniaturas de niveles
+        self.thumbnails = {}
+        for level in self.levels:
+            self.thumbnails[level['id']] = LevelThumbnail(level['id'])
+        
     def load_levels_status(self):
         """Actualizar el estado de los niveles según el perfil actual"""
         if self.current_profile:
@@ -237,29 +252,43 @@ class LevelSelectScreen:
                 particle['angle'] += random.uniform(-0.5, 0.5)  # Añadir algo de variación
     
     def draw_background(self):
-        """Dibujar fondo con gradiente y partículas"""
-        # Gradiente de fondo
-        for y in range(self.screen_height):
-            ratio = y / self.screen_height
-            color = [
-                int(self.colors['bg_gradient_top'][i] * (1 - ratio) + 
-                    self.colors['bg_gradient_bottom'][i] * ratio)
-                for i in range(3)
-            ]
-            pygame.draw.line(self.screen, color, (0, y), (self.screen_width, y))
+        """Dibujar fondo con gradiente y efectos"""
+        # Si hay imagen de fondo, dibujarla primero con transparencia
+        if self.background_image:
+            # Crear una copia de la imagen con la opacidad deseada
+            temp_image = self.background_image.copy()
+            temp_image.set_alpha(self.background_opacity)
+            self.screen.blit(temp_image, (0, 0))
+        else:
+            # Dibujar gradiente como respaldo
+            for y in range(self.screen_height):
+                ratio = y / self.screen_height
+                color = [
+                    int(self.colors['bg_gradient_top'][i] * (1 - ratio) + 
+                        self.colors['bg_gradient_bottom'][i] * ratio)
+                    for i in range(3)
+                ]
+                pygame.draw.line(self.screen, color, (0, y), (self.screen_width, y))
         
-        # Dibujar partículas
+        # Dibujar partículas sobre el fondo
         for particle in self.particles:
-            # Tamaño variable con pulsación
-            size_mod = math.sin(self.animation_time + particle['x'] * 0.01) * 0.5 + 1.5
-            size = particle['size'] * size_mod
+            particle['x'] += math.cos(particle['angle']) * particle['speed']
+            particle['y'] += math.sin(particle['angle']) * particle['speed']
             
-            pygame.draw.circle(
-                self.screen,
-                particle['color'],
-                (int(particle['x']), int(particle['y'])),
-                int(size)
-            )
+            # Wraparound
+            if particle['x'] < 0:
+                particle['x'] = self.screen_width
+            elif particle['x'] > self.screen_width:
+                particle['x'] = 0
+            if particle['y'] < 0:
+                particle['y'] = self.screen_height
+            elif particle['y'] > self.screen_height:
+                particle['y'] = 0
+            
+            # Dibujar partícula con efecto de brillo
+            alpha = int(128 + 127 * math.sin(self.animation_time * 2 + particle['x'] * 0.01))
+            pygame.draw.circle(self.screen, (*particle['color'], alpha), 
+                             (int(particle['x']), int(particle['y'])), particle['size'])
 
     def draw_title(self):
         """Dibujar título de la pantalla de selección de niveles"""
@@ -305,18 +334,20 @@ class LevelSelectScreen:
         if self.is_mobile:
             # Disposición vertical para móvil
             card_width = self.screen_width - 40
-            card_height = 80
+            card_height = 120  # Aumentado para acomodar la miniatura
             start_x = 20
             start_y = 120
             gap = 20
+            thumbnail_size = (160, 90)
         else:
             # Disposición horizontal para PC
-            card_width = 180
-            card_height = 120
+            card_width = 200  # Aumentado para acomodar la miniatura
+            card_height = 180  # Aumentado para acomodar la miniatura
             total_width = (card_width + 20) * len(self.levels) - 20
             start_x = (self.screen_width - total_width) // 2
             start_y = 120
             gap = 20
+            thumbnail_size = (180, 100)
         
         # Crear un rectángulo para contener todas las tarjetas
         container_width = self.screen_width - 40 if self.is_mobile else total_width + 40
@@ -376,12 +407,15 @@ class LevelSelectScreen:
             theme_bar_rect = pygame.Rect(x+2, y+2, card_width-4, 10)
             pygame.draw.rect(self.screen, card_color, theme_bar_rect)
             
-            # Icono del nivel
-            icon_x = x + 20
-            icon_y = y + card_height // 2
-            icon_surface = self.font_subtitle.render(level['icon'], True, card_color)
-            icon_rect = icon_surface.get_rect(center=(icon_x, icon_y))
-            self.screen.blit(icon_surface, icon_rect)
+            # Dibujar miniatura del nivel
+            thumbnail_x = x + (card_width - thumbnail_size[0]) // 2
+            thumbnail_y = y + 20
+            self.thumbnails[level['id']].draw(
+                self.screen,
+                (thumbnail_x, thumbnail_y),
+                not level['unlocked'],
+                level['completed']
+            )
             
             # Textos de nivel
             level_num = f"Nivel {level['id']}"
@@ -404,10 +438,11 @@ class LevelSelectScreen:
             status_surface = self.font_small.render(status_text, True, status_color)
             
             # Posiciones de texto
-            text_x = x + 50
-            self.screen.blit(num_surface, (text_x, y + 20))
-            self.screen.blit(name_surface, (text_x, y + 40))
-            self.screen.blit(status_surface, (text_x, y + 60))
+            text_x = x + 10
+            text_y = y + thumbnail_size[1] + 30
+            self.screen.blit(num_surface, (text_x, text_y))
+            self.screen.blit(name_surface, (text_x, text_y + 20))
+            self.screen.blit(status_surface, (text_x, text_y + 40))
             
             # Guardar rectángulo para detección de clics
             level['rect'] = card_rect
