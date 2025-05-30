@@ -7,6 +7,7 @@ import time
 from ..config.save_system import GameSaveSystem
 from ..components.Button import Button
 from ..components.LevelThumbnail import LevelThumbnail
+from ..components.Card import Card
 
 class LevelSelectScreen:
     def __init__(self, save_system=None, screen=None):
@@ -75,7 +76,7 @@ class LevelSelectScreen:
             'panel_dark': (20, 20, 40, 200),
             'button_active': (0, 100, 200),
             'button_hover': (0, 150, 255),
-            'locked_gray': (100, 100, 100),
+            'locked_gray': (140, 140, 140),
             'completed_green': (50, 180, 50),
             'level_card_bg': (40, 40, 60, 200)
         }
@@ -84,13 +85,13 @@ class LevelSelectScreen:
         try:
             self.font_title = pygame.font.Font(None, 48 if not self.is_mobile else 36)
             self.font_subtitle = pygame.font.Font(None, 24 if not self.is_mobile else 20)
-            self.font_text = pygame.font.Font(None, 18 if not self.is_mobile else 16)
-            self.font_small = pygame.font.Font(None, 14 if not self.is_mobile else 12)
+            self.font_text = pygame.font.Font(None, 24 if not self.is_mobile else 20)
+            self.font_small = pygame.font.Font(None, 20 if not self.is_mobile else 18)
         except:
             self.font_title = pygame.font.SysFont('Arial', 48 if not self.is_mobile else 36, bold=True)
             self.font_subtitle = pygame.font.SysFont('Arial', 24 if not self.is_mobile else 20, bold=True)
-            self.font_text = pygame.font.SysFont('Arial', 18 if not self.is_mobile else 16)
-            self.font_small = pygame.font.SysFont('Arial', 14 if not self.is_mobile else 12)
+            self.font_text = pygame.font.SysFont('Arial', 24 if not self.is_mobile else 20)
+            self.font_small = pygame.font.SysFont('Arial', 20 if not self.is_mobile else 18)
         
         # Definición de niveles
         self.levels = [
@@ -188,6 +189,15 @@ class LevelSelectScreen:
         # Actualizar estado de los niveles según perfil
         self.load_levels_status()
         
+        # Inicializar cards
+        self.cards = {}
+        for level in self.levels:
+            self.cards[level['id']] = Card(
+                max_width=400 if not self.is_mobile else self.screen_width - 40,
+                spacing=10,
+                padding=10
+            )
+            
         # Inicializar miniaturas de niveles
         self.thumbnails = {}
         for level in self.levels:
@@ -332,96 +342,20 @@ class LevelSelectScreen:
         """Dibujar tarjetas de selección de nivel"""
         # Configuración de las tarjetas
         if self.is_mobile:
-            # Disposición vertical para móvil
-            card_width = self.screen_width - 40
-            card_height = 120  # Aumentado para acomodar la miniatura
-            start_x = 20
-            start_y = 120
+            cards_per_row = 1  # Móvil mantiene una columna
             gap = 20
-            thumbnail_size = (160, 90)
+            start_y = 150
         else:
-            # Disposición horizontal para PC
-            card_width = 200  # Aumentado para acomodar la miniatura
-            card_height = 180  # Aumentado para acomodar la miniatura
-            total_width = (card_width + 20) * len(self.levels) - 20
-            start_x = (self.screen_width - total_width) // 2
-            start_y = 120
+            cards_per_row = 3  # Máximo de tarjetas por fila
             gap = 20
-            thumbnail_size = (180, 100)
+            start_y = 150
         
-        # Crear un rectángulo para contener todas las tarjetas
-        container_width = self.screen_width - 40 if self.is_mobile else total_width + 40
-        container_height = (card_height + gap) * len(self.levels) if self.is_mobile else card_height + 40
-        container_x = (self.screen_width - container_width) // 2
-        container_y = start_y - 20
-        
-        # Dibujar contenedor
-        container_surface = pygame.Surface((container_width, container_height), pygame.SRCALPHA)
-        container_surface.fill((20, 20, 40, 150))
-        self.screen.blit(container_surface, (container_x, container_y))
-        pygame.draw.rect(self.screen, self.colors['ice_blue'], 
-                        (container_x, container_y, container_width, container_height), 2)
+        # Calcular número de filas necesarias
+        num_rows = math.ceil(len(self.levels) / cards_per_row)
         
         # Dibujar cada tarjeta de nivel
         for i, level in enumerate(self.levels):
-            # Calcular posición basada en índice y diseño
-            if self.is_mobile:
-                x = start_x
-                y = start_y + (card_height + gap) * i
-            else:
-                x = start_x + (card_width + gap) * i
-                y = start_y
-            
-            # Comprobar si está seleccionado o con hover
-            is_selected = i == self.selected_level_index
-            is_hover = i == self.hover_level_index and level['unlocked']
-            
-            # Determinar color basado en estado
-            if not level['unlocked']:
-                card_color = self.colors['locked_gray']
-                border_color = self.colors['locked_gray']
-            elif is_selected or is_hover:
-                # Animación pulsante para el seleccionado
-                if is_selected and self.animate_selected:
-                    glow = abs(math.sin(self.animation_time * 10)) * 50
-                    card_color = level['color']
-                    border_color = (min(255, level['color'][0] + int(glow)),
-                                    min(255, level['color'][1] + int(glow)),
-                                    min(255, level['color'][2] + int(glow)))
-                else:
-                    card_color = level['color']
-                    border_color = self.colors['text_gold']
-            elif level['completed']:
-                card_color = self.colors['completed_green']
-                border_color = self.colors['text_gold']
-            else:
-                card_color = level['color']
-                border_color = self.colors['ice_blue']
-            
-            # Dibujar tarjeta
-            card_rect = pygame.Rect(x, y, card_width, card_height)
-            pygame.draw.rect(self.screen, self.colors['level_card_bg'], card_rect)
-            pygame.draw.rect(self.screen, border_color, card_rect, 2)
-            
-            # Colorear borde superior para indicar tema
-            theme_bar_rect = pygame.Rect(x+2, y+2, card_width-4, 10)
-            pygame.draw.rect(self.screen, card_color, theme_bar_rect)
-            
-            # Dibujar miniatura del nivel
-            thumbnail_x = x + (card_width - thumbnail_size[0]) // 2
-            thumbnail_y = y + 20
-            self.thumbnails[level['id']].draw(
-                self.screen,
-                (thumbnail_x, thumbnail_y),
-                not level['unlocked'],
-                level['completed']
-            )
-            
-            # Textos de nivel
-            level_num = f"Nivel {level['id']}"
-            level_name = level['name']
-            
-            # Estado del nivel (completado, bloqueado)
+            # Determinar estado y color del texto
             if not level['unlocked']:
                 status_text = "BLOQUEADO"
                 status_color = self.colors['locked_gray']
@@ -432,17 +366,52 @@ class LevelSelectScreen:
                 status_text = "DISPONIBLE"
                 status_color = self.colors['ice_blue']
             
-            # Renderizar textos
-            num_surface = self.font_small.render(level_num, True, self.colors['text_gold'])
-            name_surface = self.font_text.render(level_name, True, self.colors['text_white'])
-            status_surface = self.font_small.render(status_text, True, status_color)
-            
-            # Posiciones de texto
-            text_x = x + 10
-            text_y = y + thumbnail_size[1] + 30
-            self.screen.blit(num_surface, (text_x, text_y))
-            self.screen.blit(name_surface, (text_x, text_y + 20))
-            self.screen.blit(status_surface, (text_x, text_y + 40))
+            # Calcular posición de la tarjeta
+            if self.is_mobile:
+                # Para móvil, una columna centrada
+                card = self.cards[level['id']]
+                card_rect = card.draw(
+                    self.screen,
+                    (20, start_y + (card.height + gap) * i),
+                    self.thumbnails[level['id']].image,
+                    status_text,
+                    status_color,
+                    i == self.selected_level_index,
+                    abs(math.sin(self.animation_time * 10)) if i == self.selected_level_index else 0
+                )
+            else:
+                # Para PC, distribuir en filas
+                row = i // cards_per_row
+                col = i % cards_per_row
+                
+                # Dibujar la tarjeta
+                card = self.cards[level['id']]
+                
+                # Si es la última fila y no está completa, centrar las tarjetas
+                if row == num_rows - 1:
+                    cards_in_last_row = len(self.levels) - (row * cards_per_row)
+                    if cards_in_last_row < cards_per_row:
+                        total_width = (card.width + gap) * cards_in_last_row - gap
+                        start_x = (self.screen_width - total_width) // 2
+                    else:
+                        total_width = (card.width + gap) * cards_per_row - gap
+                        start_x = (self.screen_width - total_width) // 2
+                else:
+                    total_width = (card.width + gap) * cards_per_row - gap
+                    start_x = (self.screen_width - total_width) // 2
+                
+                x = start_x + (card.width + gap) * col
+                y = start_y + (card.height + gap) * row
+                
+                card_rect = card.draw(
+                    self.screen,
+                    (x, y),
+                    self.thumbnails[level['id']].image,
+                    status_text,
+                    status_color,
+                    i == self.selected_level_index,
+                    abs(math.sin(self.animation_time * 10)) if i == self.selected_level_index else 0
+                )
             
             # Guardar rectángulo para detección de clics
             level['rect'] = card_rect
@@ -502,7 +471,7 @@ class LevelSelectScreen:
             status_text = "¡Nivel completado! Puedes volver a jugarlo para mejorar tu puntuación."
             status_color = self.colors['completed_green']
         else:
-            status_text = "¡Nivel listo para jugar! Enfréntate al reto y ayuda a restaurar el planeta."
+            status_text = "¡Nivel listo para jugar! Ayuda a restaurar el planeta."
             status_color = self.colors['ice_blue']
             
         status_surface = self.font_text.render(status_text, True, status_color)

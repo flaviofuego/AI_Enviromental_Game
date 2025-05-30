@@ -2,7 +2,7 @@ import pygame
 import os
 
 class LevelThumbnail:
-    def __init__(self, level_id, size=(160, 100)):
+    def __init__(self, level_id, size=(350, 200)):
         """
         Inicializa una miniatura de nivel
         
@@ -39,9 +39,9 @@ class LevelThumbnail:
         
         # Añadir texto "Nivel X"
         font = pygame.font.Font(None, 24)
-        text = font.render(f"Nivel {self.level_id}", True, (200, 200, 220))
-        text_rect = text.get_rect(center=(self.size[0]/2, self.size[1]/2))
-        self.image.blit(text, text_rect)
+        #text = font.render(f"Nivel {self.level_id}", True, (200, 200, 220))
+        #text_rect = text.get_rect(center=(self.size[0]/2, self.size[1]/2))
+        #self.image.blit(text, text_rect)
     
     def draw(self, surface, position, is_locked=False, is_completed=False):
         """
