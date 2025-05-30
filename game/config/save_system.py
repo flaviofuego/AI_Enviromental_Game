@@ -173,14 +173,29 @@ class GameSaveSystem:
     
     def get_all_profiles(self):
         """
-        Obtiene lista de todos los perfiles disponibles
+        Obtiene lista de todos los perfiles disponibles, ordenados por última vez jugado
         
         Returns:
             list: Lista de perfiles resumidos
         """
-        # Ordenar por última vez jugado
-        self.profiles_list["profiles"].sort(key=lambda x: x.get("last_played", ""), reverse=True)
+        # Asegurarse de que los perfiles estén ordenados por última vez jugado
+        self.profiles_list["profiles"].sort(
+            key=lambda x: x.get("last_played", ""),
+            reverse=True  # El más reciente primero
+        )
         return self.profiles_list["profiles"]
+    
+    def get_last_used_profile(self):
+        """
+        Obtiene y carga el último perfil usado
+        
+        Returns:
+            dict: Datos del último perfil usado o None si no hay perfiles
+        """
+        profiles = self.get_all_profiles()
+        if profiles:
+            return self.load_profile(profiles[0]["profile_id"])
+        return None
     
     def delete_profile(self, profile_id):
         """

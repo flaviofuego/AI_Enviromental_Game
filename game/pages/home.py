@@ -10,26 +10,33 @@ from ..config.save_system import GameSaveSystem
 from ..components.Button import Button
 
 class HockeyMainScreen:
-    def __init__(self):
-        pygame.init()
-        
-        # Configuración de pantalla adaptativa
-        info = pygame.display.Info()
-        self.screen_width = min(1200, info.current_w - 100)
-        self.screen_height = min(800, info.current_h - 100)
-        
-        # Detectar si es formato móvil (relación de aspecto vertical)
-        self.is_mobile = self.screen_height > self.screen_width
-        
-        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-        pygame.display.set_caption("Hockey Is Melting Down - Salva la Tierra")
+    def __init__(self, screen=None, save_system=None):
+        # Si no se pasa una ventana, crear una nueva (compatibilidad hacia atrás)
+        if screen is None:
+            pygame.init()
+            # Configuración de pantalla adaptativa
+            info = pygame.display.Info()
+            self.screen_width = min(1200, info.current_w - 100)
+            self.screen_height = min(800, info.current_h - 100)
+            
+            # Detectar si es formato móvil (relación de aspecto vertical)
+            self.is_mobile = self.screen_height > self.screen_width
+            
+            self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+            pygame.display.set_caption("Hockey Is Melting Down - Salva la Tierra")
+        else:
+            # Usar la ventana existente
+            self.screen = screen
+            self.screen_width = screen.get_width()
+            self.screen_height = screen.get_height()
+            self.is_mobile = self.screen_height > self.screen_width
         
         # Cargar imagen de fondo
         self.background_image = pygame.image.load('game/assets/background.png')
         self.background_opacity = 200  # 0-255, donde 255 es completamente opaco
         
         # Inicializar sistema de guardado
-        self.save_system = GameSaveSystem()
+        self.save_system = save_system if save_system else GameSaveSystem()
         
         # Estado de interfaz
         self.current_screen = "main"  # main, profiles, create_profile, settings
@@ -98,21 +105,21 @@ class HockeyMainScreen:
         if self.is_mobile:
             # Disposición vertical para móvil
             self.buttons = {
-                'play': {'pos': (center_x, center_y - 80), 'radius': 100, 'color': self.colors['hope_green']},
-                'history': {'pos': (center_x - 80, center_y + 40), 'radius': 30, 'color': self.colors['ice_blue']},
-                'player': {'pos': (center_x + 80, center_y + 40), 'radius': 30, 'color': self.colors['warning_orange']},
-                'settings': {'pos': (30, 30), 'radius': 30, 'color': self.colors['ice_blue']},
+                'play': {'pos': (center_x, center_y - 80), 'scale': (100, 100), 'tex_hover': 'Jugar'},
+                'history': {'pos': (center_x - 80, center_y + 40), 'scale': (30, 30), 'tex_hover': 'Historial'},
+                'player': {'pos': (center_x + 80, center_y + 40), 'scale': (30, 30), 'tex_hover': 'Jugador'},
+                'settings': {'pos': (30, 30), 'scale': (30, 30), 'tex_hover': 'Configuración'},
                 'help': {'pos': (self.screen_width - 30, 30), 'radius': 30, 'color': self.colors['ice_blue']}
             }
         else:
             # Disposición para PC
             self.buttons = {
-                'play': {'pos': (center_x, center_y), 'radius': 300, 'color': self.colors['hope_green']},
-                'history': {'pos': (center_x - 220, center_y), 'radius': 120, 'color': self.colors['ice_blue']},
-                'player': {'pos': (center_x + 220, center_y), 'radius': 120, 'color': self.colors['warning_orange']},
+                'play': {'pos': (center_x, center_y), 'scale': (300, 300), 'tex_hover': 'Jugar'},
+                'history': {'pos': (center_x - 220, center_y), 'scale': (120, 120), 'tex_hover': 'Historial'},
+                'player': {'pos': (center_x + 220, center_y), 'scale': (120, 120), 'tex_hover': 'Jugador'},
                 #'background': {'pos': (center_x, center_y + 120), 'radius': 30, 'color': self.colors['button_active']},
-                'settings': {'pos': (40, 40), 'radius': 80, 'color': self.colors['ice_blue']},
-                'help': {'pos': (self.screen_width - 40, 40), 'radius': 80, 'color': self.colors['ice_blue']}
+                'settings': {'pos': (40, 40), 'scale': (80, 80), 'tex_hover': 'Configuración'},
+                'help': {'pos': (self.screen_width - 40, 40), 'scale': (80, 80), 'tex_hover': 'Ayuda'}
             }
         
         # Animaciones
@@ -139,12 +146,19 @@ class HockeyMainScreen:
         self.clock = pygame.time.Clock()
     
     def load_profiles(self):
-        """Carga la lista de perfiles disponibles"""
+        """Carga la lista de perfiles disponibles y el último perfil usado"""
         self.profiles = self.save_system.get_all_profiles()
         
-        # Si hay perfiles disponibles, pre-seleccionar el primero (el más reciente)
+        # Si hay perfiles disponibles, cargar el primero (el más reciente)
         if self.profiles:
             self.selected_profile_index = 0
+            # Cargar automáticamente el último perfil usado
+            profile_id = self.profiles[0]["profile_id"]  # El primer perfil es el más reciente
+            self.load_selected_profile()
+            
+            # No mostrar mensaje de bienvenida al inicio
+            self.success_message = ""
+            self.message_time = 0
     
     def load_selected_profile(self):
         """Carga el perfil seleccionado"""
@@ -675,24 +689,12 @@ class HockeyMainScreen:
         self.screen.blit(prefix_surface, prefix_rect)
         self.screen.blit(critical_surface, critical_rect)
     
-    def draw_circular_button(self, button_key, icon_text, hover_text=""):
+    def draw_circular_button(self, button_object: Button):
         """Dibujar botón circular con efectos"""
-        button = self.buttons[button_key]
-        pos = button['pos']
-        radius = button['radius']
-        color = button['color']
+        button_object.draw(self.screen)
+        is_hovered = button_object.is_hovered()
 
-        draw_button = Button(button_key, (radius, radius), pos)
-        draw_button.draw(self.screen)
-        is_hovered = draw_button.is_hovered()
-
-        self.buttons[button_key]['object'] = draw_button
-        
-        # Mostrar texto de hover
-        if is_hovered and hover_text:
-            hover_surface = self.font_small.render(hover_text, True, self.colors['text_white'])
-            hover_rect = hover_surface.get_rect(center=(pos[0], pos[1] + radius + 10))
-            self.screen.blit(hover_surface, hover_rect)
+        self.buttons[button_object.name]['object'] = button_object
 
         return is_hovered
 
@@ -867,10 +869,294 @@ class HockeyMainScreen:
                     return None
         return None
 
+    def draw_profiles_screen(self):
+        """Dibujar pantalla de perfiles"""
+        # Dibujar fondo
+        self.draw_animated_background()
+        
+        # Panel principal
+        panel_width = 600 if not self.is_mobile else self.screen_width - 40
+        panel_height = 500 if not self.is_mobile else self.screen_height - 100
+        panel_x = (self.screen_width - panel_width) // 2
+        panel_y = (self.screen_height - panel_height) // 2
+        
+        # Fondo del panel con transparencia
+        panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        panel_surface.fill(self.colors['panel_dark'])
+        self.screen.blit(panel_surface, (panel_x, panel_y))
+        
+        # Borde del panel
+        pygame.draw.rect(self.screen, self.colors['ice_blue'], 
+                        (panel_x, panel_y, panel_width, panel_height), 2)
+        
+        # Título
+        title = self.font_title.render("PERFILES DE JUGADOR", True, self.colors['ice_blue'])
+        title_rect = title.get_rect(center=(self.screen_width // 2, panel_y + 40))
+        self.screen.blit(title, title_rect)
+        
+        # Lista de perfiles
+        profiles_y_start = panel_y + 100
+        profile_height = 60
+        
+        ui_elements = {
+            'profiles': [],
+            'create_button': None,
+            'back_button': None
+        }
+        
+        # Mostrar perfiles existentes
+        for i, profile in enumerate(self.profiles):
+            y_pos = profiles_y_start + i * (profile_height + 10)
+            
+            # Verificar si es el perfil seleccionado
+            is_selected = i == self.selected_profile_index
+            
+            # Fondo del perfil
+            profile_rect = pygame.Rect(panel_x + 20, y_pos, panel_width - 40, profile_height)
+            color = self.colors['button_hover'] if is_selected else (50, 50, 50, 180)
+            pygame.draw.rect(self.screen, color, profile_rect, border_radius=5)
+            
+            # Borde del perfil
+            border_color = self.colors['text_gold'] if is_selected else self.colors['ice_blue']
+            pygame.draw.rect(self.screen, border_color, profile_rect, 2, border_radius=5)
+            
+            # Nombre del jugador
+            name_text = self.font_subtitle.render(profile['player_name'], True, self.colors['text_white'])
+            self.screen.blit(name_text, (profile_rect.x + 20, profile_rect.y + 10))
+            
+            # Puntos y fecha
+            points_text = f"Puntos: {profile['total_points']}"
+            date_text = f"Último acceso: {profile['last_played'][:10]}"
+            
+            points_surface = self.font_text.render(points_text, True, self.colors['text_gold'])
+            date_surface = self.font_small.render(date_text, True, self.colors['text_white'])
+            
+            self.screen.blit(points_surface, (profile_rect.x + 20, profile_rect.y + 35))
+            self.screen.blit(date_surface, (profile_rect.x + panel_width // 2, profile_rect.y + 38))
+            
+            ui_elements['profiles'].append({
+                'rect': profile_rect,
+                'index': i
+            })
+        
+        # Botones de acción
+        button_y = panel_y + panel_height - 70
+        
+        # Botón Crear Nuevo Perfil
+        create_button = pygame.Rect(panel_x + 20, button_y, 150, 40)
+        pygame.draw.rect(self.screen, self.colors['hope_green'], create_button, border_radius=5)
+        create_text = self.font_text.render("Nuevo Perfil", True, self.colors['text_white'])
+        create_text_rect = create_text.get_rect(center=create_button.center)
+        self.screen.blit(create_text, create_text_rect)
+        ui_elements['create_button'] = create_button
+        
+        # Botón Cargar
+        if self.selected_profile_index >= 0:
+            load_button = pygame.Rect(panel_x + 190, button_y, 100, 40)
+            pygame.draw.rect(self.screen, self.colors['button_active'], load_button, border_radius=5)
+            load_text = self.font_text.render("Cargar", True, self.colors['text_white'])
+            load_text_rect = load_text.get_rect(center=load_button.center)
+            self.screen.blit(load_text, load_text_rect)
+            ui_elements['load_button'] = load_button
+            
+            # Botón Eliminar
+            delete_button = pygame.Rect(panel_x + 310, button_y, 100, 40)
+            pygame.draw.rect(self.screen, self.colors['critical_red'], delete_button, border_radius=5)
+            delete_text = self.font_text.render("Eliminar", True, self.colors['text_white'])
+            delete_text_rect = delete_text.get_rect(center=delete_button.center)
+            self.screen.blit(delete_text, delete_text_rect)
+            ui_elements['delete_button'] = delete_button
+        
+        # Botón Volver
+        back_button = pygame.Rect(panel_x + panel_width - 120, button_y, 100, 40)
+        pygame.draw.rect(self.screen, self.colors['warning_orange'], back_button, border_radius=5)
+        back_text = self.font_text.render("Volver", True, self.colors['text_white'])
+        back_text_rect = back_text.get_rect(center=back_button.center)
+        self.screen.blit(back_text, back_text_rect)
+        ui_elements['back_button'] = back_button
+        
+        # Mostrar mensajes
+        self.draw_messages()
+        
+        return ui_elements
+
+    def draw_create_profile_screen(self):
+        """Dibujar pantalla de creación de perfil"""
+        # Dibujar fondo
+        self.draw_animated_background()
+        
+        # Panel de creación
+        panel_width = 400 if not self.is_mobile else self.screen_width - 40
+        panel_height = 300
+        panel_x = (self.screen_width - panel_width) // 2
+        panel_y = (self.screen_height - panel_height) // 2
+        
+        # Fondo del panel
+        panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        panel_surface.fill(self.colors['panel_dark'])
+        self.screen.blit(panel_surface, (panel_x, panel_y))
+        
+        # Borde del panel
+        pygame.draw.rect(self.screen, self.colors['hope_green'], 
+                        (panel_x, panel_y, panel_width, panel_height), 2)
+        
+        # Título
+        title = self.font_subtitle.render("CREAR NUEVO PERFIL", True, self.colors['hope_green'])
+        title_rect = title.get_rect(center=(self.screen_width // 2, panel_y + 40))
+        self.screen.blit(title, title_rect)
+        
+        # Campo de entrada
+        input_rect = pygame.Rect(panel_x + 50, panel_y + 100, panel_width - 100, 40)
+        color = self.colors['text_white'] if self.input_active else (100, 100, 100)
+        pygame.draw.rect(self.screen, color, input_rect, 2)
+        
+        # Texto del input
+        text_surface = self.font_text.render(self.input_text, True, self.colors['text_white'])
+        self.screen.blit(text_surface, (input_rect.x + 10, input_rect.y + 10))
+        
+        # Cursor parpadeante
+        if self.input_active and int(self.animation_time * 2) % 2:
+            cursor_x = input_rect.x + 10 + text_surface.get_width()
+            pygame.draw.line(self.screen, self.colors['text_white'], 
+                           (cursor_x, input_rect.y + 5), 
+                           (cursor_x, input_rect.y + 35), 2)
+        
+        # Instrucciones
+        instruction = self.font_small.render("Ingresa tu nombre de jugador", True, self.colors['text_white'])
+        instruction_rect = instruction.get_rect(center=(self.screen_width // 2, panel_y + 80))
+        self.screen.blit(instruction, instruction_rect)
+        
+        # Botones
+        button_y = panel_y + panel_height - 60
+        
+        # Botón Crear
+        create_button = pygame.Rect(panel_x + 50, button_y, 100, 40)
+        pygame.draw.rect(self.screen, self.colors['hope_green'], create_button, border_radius=5)
+        create_text = self.font_text.render("Crear", True, self.colors['text_white'])
+        create_text_rect = create_text.get_rect(center=create_button.center)
+        self.screen.blit(create_text, create_text_rect)
+        
+        # Botón Cancelar
+        cancel_button = pygame.Rect(panel_x + panel_width - 150, button_y, 100, 40)
+        pygame.draw.rect(self.screen, self.colors['critical_red'], cancel_button, border_radius=5)
+        cancel_text = self.font_text.render("Cancelar", True, self.colors['text_white'])
+        cancel_text_rect = cancel_text.get_rect(center=cancel_button.center)
+        self.screen.blit(cancel_text, cancel_text_rect)
+        
+        # Mostrar mensajes
+        self.draw_messages()
+        
+        return {
+            'input_rect': input_rect,
+            'create_button': create_button,
+            'cancel_button': cancel_button
+        }
+
+    def handle_profiles_events(self, event, ui_elements):
+        """Manejar eventos en la pantalla de perfiles"""
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Clic izquierdo
+                # Verificar clic en perfiles
+                for profile_data in ui_elements['profiles']:
+                    if profile_data['rect'].collidepoint(event.pos):
+                        self.selected_profile_index = profile_data['index']
+                        break
+                
+                # Verificar botones
+                if ui_elements['create_button'].collidepoint(event.pos):
+                    self.current_screen = "create_profile"
+                    self.input_text = ""
+                    self.input_active = True
+                
+                elif ui_elements['back_button'].collidepoint(event.pos):
+                    self.current_screen = "main"
+                
+                elif 'load_button' in ui_elements and ui_elements['load_button'].collidepoint(event.pos):
+                    if self.load_selected_profile():
+                        self.current_screen = "main"
+                
+                elif 'delete_button' in ui_elements and ui_elements['delete_button'].collidepoint(event.pos):
+                    self.delete_selected_profile()
+        
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.current_screen = "main"
+
+    def handle_create_profile_events(self, event, ui_elements):
+        """Manejar eventos en la pantalla de creación de perfil"""
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                # Activar/desactivar campo de texto
+                if ui_elements['input_rect'].collidepoint(event.pos):
+                    self.input_active = True
+                else:
+                    self.input_active = False
+                
+                # Verificar botones
+                if ui_elements['create_button'].collidepoint(event.pos):
+                    if self.create_new_profile():
+                        self.current_screen = "main"
+                
+                elif ui_elements['cancel_button'].collidepoint(event.pos):
+                    self.current_screen = "profiles"
+                    self.input_text = ""
+        
+        elif event.type == pygame.KEYDOWN:
+            if self.input_active:
+                if event.key == pygame.K_RETURN:
+                    if self.create_new_profile():
+                        self.current_screen = "main"
+                elif event.key == pygame.K_BACKSPACE:
+                    self.input_text = self.input_text[:-1]
+                elif event.key == pygame.K_ESCAPE:
+                    self.current_screen = "profiles"
+                    self.input_text = ""
+                else:
+                    # Limitar longitud del nombre
+                    if len(self.input_text) < 20:
+                        self.input_text += event.unicode
+
+    def draw_messages(self):
+        """Dibujar mensajes de error o éxito"""
+        current_time = time.time()
+        
+        # Mostrar mensaje de error
+        if self.error_message and (current_time - self.message_time) < 3:
+            error_surface = self.font_text.render(self.error_message, True, self.colors['critical_red'])
+            error_rect = error_surface.get_rect(center=(self.screen_width // 2, self.screen_height - 100))
+            
+            # Fondo para el mensaje
+            bg_rect = pygame.Rect(error_rect.x - 10, error_rect.y - 5, 
+                                error_rect.width + 20, error_rect.height + 10)
+            pygame.draw.rect(self.screen, (40, 0, 0), bg_rect, border_radius=5)
+            pygame.draw.rect(self.screen, self.colors['critical_red'], bg_rect, 2, border_radius=5)
+            
+            self.screen.blit(error_surface, error_rect)
+        
+        # Mostrar mensaje de éxito
+        if self.success_message and (current_time - self.message_time) < 3:
+            success_surface = self.font_text.render(self.success_message, True, self.colors['hope_green'])
+            success_rect = success_surface.get_rect(center=(self.screen_width // 2, self.screen_height - 100))
+            
+            # Fondo para el mensaje
+            bg_rect = pygame.Rect(success_rect.x - 10, success_rect.y - 5, 
+                                success_rect.width + 20, success_rect.height + 10)
+            pygame.draw.rect(self.screen, (0, 40, 0), bg_rect, border_radius=5)
+            pygame.draw.rect(self.screen, self.colors['hope_green'], bg_rect, 2, border_radius=5)
+            
+            self.screen.blit(success_surface, success_rect)
+
     def run(self):
         """Bucle principal del menú"""
         running = True
         result = None
+
+        # Crear botones
+        play_button = Button('play', self.buttons['play']['scale'], self.buttons['play']['pos'],  self.buttons['play']['tex_hover'])
+        history_button = Button('history', self.buttons['history']['scale'], self.buttons['history']['pos'],  self.buttons['history']['tex_hover'])
+        player_button = Button('player', self.buttons['player']['scale'], self.buttons['player']['pos'],  self.buttons['player']['tex_hover'])
+        settings_button = Button('settings', self.buttons['settings']['scale'], self.buttons['settings']['pos'],  self.buttons['settings']['tex_hover'])
+        help_button = Button('help', self.buttons['help']['scale'], self.buttons['help']['pos'],  self.buttons['help']['tex_hover'])
         
         while running:
             dt = self.clock.tick(60) / 1000.0
@@ -902,13 +1188,13 @@ class HockeyMainScreen:
                                 result = action
                                 running = False
                 
-                """ elif self.current_screen == "profiles":
+                elif self.current_screen == "profiles":
                     ui_elements = self.draw_profiles_screen()
                     self.handle_profiles_events(event, ui_elements)
                     
                 elif self.current_screen == "create_profile":
                     ui_elements = self.draw_create_profile_screen()
-                    self.handle_create_profile_events(event, ui_elements) """
+                    self.handle_create_profile_events(event, ui_elements)
             
             # Dibujar según la pantalla current_screen
             if self.current_screen == "main":
@@ -917,33 +1203,44 @@ class HockeyMainScreen:
                 self.draw_title()
                 
                 # Dibujar botones with efectos hover
-                self.draw_circular_button('play', '▶', "Comenzar Misión")
-                self.draw_circular_button('history', '📜', "Historial de Partidas")
-                self.draw_circular_button('player', '👤', "Personalizar Jugador")
-                self.draw_circular_button('settings', '⚙', "Configuración")
-                self.draw_circular_button('help', '?', "Ayuda")
-                
-                if not self.is_mobile:
-                    #self.draw_circular_button('background', '🎨', "Fondo Temático")
-                    pass
+                self.draw_circular_button(play_button)
+                self.draw_circular_button(history_button)
+                self.draw_circular_button(player_button)
+                self.draw_circular_button(settings_button)
+                self.draw_circular_button(help_button)
                 
                 # Dibujar paneles informativos
                 self.draw_gaia_panel()
                 self.draw_progress_panel()
                 self.draw_climate_warning()
                 
-                # Mostrar mensaje del perfil activo
+                # Mostrar mensaje del perfil activo en la esquina inferior izquierda
                 if self.save_system.current_profile:
                     profile_name = self.save_system.current_profile["player_name"]
-                    profile_text = f"Perfil: {profile_name}"
+                    profile_text = f"Agente: {profile_name}"
+                    
+                    # Crear superficie para el fondo del mensaje
                     profile_surface = self.font_text.render(profile_text, True, self.colors['text_gold'])
-                    self.screen.blit(profile_surface, (10, 10))
+                    profile_rect = profile_surface.get_rect()
+                    profile_rect.bottomleft = (20, self.screen_height - 20)
+                    
+                    # Dibujar fondo semi-transparente
+                    bg_rect = profile_rect.inflate(20, 10)
+                    bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
+                    bg_surface.fill((20, 20, 40, 200))
+                    self.screen.blit(bg_surface, bg_rect)
+                    
+                    # Dibujar borde
+                    pygame.draw.rect(self.screen, self.colors['ice_blue'], bg_rect, 1)
+                    
+                    # Dibujar texto
+                    self.screen.blit(profile_surface, profile_rect)
                 
-            """  elif self.current_screen == "profiles":
+            elif self.current_screen == "profiles":
                 self.draw_profiles_screen()
                 
             elif self.current_screen == "create_profile":
-                self.draw_create_profile_screen() """
+                self.draw_create_profile_screen()
             
             # Mostrar mensajes generales
             

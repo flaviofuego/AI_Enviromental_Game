@@ -8,39 +8,44 @@ from ..config.save_system import GameSaveSystem
 from ..components.Button import Button
 
 class LevelSelectScreen:
-    def __init__(self, save_system=None):
-        pygame.init()
-        
-        # Configuración de pantalla adaptativa
-        info = pygame.display.Info()
-        self.screen_width = min(1200, info.current_w - 100)
-        self.screen_height = min(800, info.current_h - 100)
-        
-        # Detectar si es formato móvil (relación de aspecto vertical)
-        self.is_mobile = self.screen_height > self.screen_width
-        
-        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-        pygame.display.set_caption("Hockey Is Melting Down - Selección de Niveles")
+    def __init__(self, save_system=None, screen=None):
+        # Si no se pasa una ventana, crear una nueva (compatibilidad hacia atrás)
+        if screen is None:
+            pygame.init()
+            # Configuración de pantalla adaptativa
+            info = pygame.display.Info()
+            self.screen_width = min(1200, info.current_w - 100)
+            self.screen_height = min(800, info.current_h - 100)
+            
+            # Detectar si es formato móvil (relación de aspecto vertical)
+            self.is_mobile = self.screen_height > self.screen_width
+            
+            self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+            pygame.display.set_caption("Hockey Is Melting Down - Selección de Niveles")
+        else:
+            # Usar la ventana existente
+            self.screen = screen
+            self.screen_width = screen.get_width()
+            self.screen_height = screen.get_height()
+            self.is_mobile = self.screen_height > self.screen_width
         
         # Cargar sistema de guardado (o usar el proporcionado)
         if save_system:
             self.save_system = save_system
         else:
+            print("Advertencia: No se proporcionó sistema de guardado. Creando uno nuevo.")
             self.save_system = GameSaveSystem()
         
-        # Estado actual
+        # Estado actual - Usar el perfil actual del sistema de guardado
         self.current_profile = self.save_system.current_profile
+        if not self.current_profile:
+            print("Error: No hay perfil activo en el sistema de guardado")
         self.selected_level = None
         self.selected_level_index = -1
         self.hover_level_index = -1
         self.show_level_info = False
         self.animate_selected = False
         self.animation_time = 0
-        
-        # Variables para efectos de transición
-        self.transitioning = False
-        self.transition_alpha = 0
-        self.transition_direction = 1  # 1 para fade in, -1 para fade out
         
         # Mensajes temporales
         self.message = ""
@@ -598,41 +603,10 @@ class LevelSelectScreen:
                 self.hover_level_index = i
                 return
     
-    # Añadir método para efectos de transición
-    def start_transition(self, direction):
-        """Inicia una transición (1 para fade in, -1 para fade out)"""
-        self.transitioning = True
-        self.transition_direction = direction
-        self.transition_alpha = 0 if direction > 0 else 255
-    
-    def update_transition(self):
-        """Actualiza el estado de la transición"""
-        if self.transitioning:
-            # Actualizar valor alpha
-            self.transition_alpha += 15 * self.transition_direction
-            
-            # Comprobar si la transición ha terminado
-            if self.transition_alpha >= 255 or self.transition_alpha <= 0:
-                self.transitioning = False
-                return True
-        return False
-    
-    def draw_transition(self):
-        """Dibuja el efecto de transición"""
-        if self.transitioning or self.transition_alpha > 0:
-            # Crear superficie para el efecto de fade
-            fade_surface = pygame.Surface((self.screen_width, self.screen_height))
-            fade_surface.fill((0, 0, 0))  # Negro
-            fade_surface.set_alpha(self.transition_alpha)
-            self.screen.blit(fade_surface, (0, 0))
-    
     def run(self):
         """Bucle principal"""
         running = True
         result = None
-        
-        # Efecto inicial de fade in
-        self.start_transition(1)  # Fade in
         
         while running:
             dt = self.clock.tick(60) / 1000.0  # Delta time en segundos
@@ -641,31 +615,21 @@ class LevelSelectScreen:
             # Actualizar partículas
             self.update_particles()
             
-            # Actualizar efecto de transición
-            if self.transitioning and self.update_transition() and self.transition_direction < 0:
-                # Si terminamos un fade out, salimos del bucle
-                running = False
-            
             # Procesar eventos
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    self.start_transition(-1)  # Iniciar fade out
-                    running = False
-                    result = None
-                elif event.type == pygame.MOUSEBUTTONDOWN and not self.transitioning:
+                    return "exit"  # Retornar "exit" directamente en lugar de volver al menú
+                elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Clic izquierdo
                         action = self.handle_click(event.pos)
                         if action and isinstance(action, str):
-                            if action == 'back_to_menu' or action.startswith('start_level_'):
-                                # Iniciar transición de salida
-                                self.start_transition(-1)
-                                result = action
-                elif event.type == pygame.MOUSEMOTION and not self.transitioning:
+                            result = action
+                            running = False
+                elif event.type == pygame.MOUSEMOTION:
                     self.handle_hover(event.pos)
-                elif event.type == pygame.KEYDOWN and not self.transitioning:
+                elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        self.start_transition(-1)
-                        result = 'back_to_menu'
+                        return "exit"  # Salir del juego con la tecla Escape
             
             # Dibujar pantalla
             self.draw_background()
@@ -675,9 +639,6 @@ class LevelSelectScreen:
                 self.draw_level_details()
             self.draw_buttons()
             self.draw_message()
-            
-            # Dibujar efecto de transición encima de todo
-            self.draw_transition()
             
             # Actualizar pantalla
             pygame.display.flip()
