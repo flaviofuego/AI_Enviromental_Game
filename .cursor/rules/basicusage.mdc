@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+MAKE SURE NO 
+
+FEATURES ARE REMOVED, only modify if needed to fix a bug or if I specifically ask you to remove it. Make sure that you CHECK THE CODE and make sure you don't recreate components that are already in place, instead modify them without removing features to make sure that there are no duplicates. If there are duplicate functions or files, consolidate them.

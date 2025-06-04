@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Make sure you analyze all game-related files before editing anything. Don't remove features unless requested. Always keep in mind that the entire project revolves around the game, so each feature must have a minimum level of usability and aesthetics.
