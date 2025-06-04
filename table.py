@@ -12,12 +12,12 @@ class Table:
         self.goal_width = HEIGHT * GOAL_WIDTH_RATIO
         self.goal_y1 = HEIGHT * (1 - GOAL_WIDTH_RATIO) / 2
         self.goal_y2 = HEIGHT * (1 + GOAL_WIDTH_RATIO) / 2
+        self.table_color = BLACK  # Default color, can be changed for themes
         
     def draw(self, screen):
-           
         """Dibuja la mesa de air hockey con metas visibles"""
         # Fondo
-        screen.fill(BLACK)
+        screen.fill(self.table_color)
         
         # Línea central
         pygame.draw.line(screen, WHITE, (WIDTH // 2, 0), (WIDTH // 2, HEIGHT), self.line_width)
@@ -73,18 +73,12 @@ class Table:
                 s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
                 pygame.draw.rect(s, (255, 255, 255, alpha), (i, i, WIDTH - 2*i, HEIGHT - 2*i), 1)
                 screen.blit(s, (0, 0))
+    
     def is_goal(self, puck):
-        """Verifica si hay un gol con la nueva visualización de porterías"""
-        # Gol en la portería izquierda (IA anota)
-        if (puck.position[0] <= puck.radius and 
-            puck.position[1] >= self.goal_y1 and 
-            puck.position[1] <= self.goal_y2):
-            return "ai"
-            
-        # Gol en la portería derecha (jugador anota)
-        elif (puck.position[0] >= WIDTH - puck.radius and 
-            puck.position[1] >= self.goal_y1 and 
-            puck.position[1] <= self.goal_y2):
-            return "player"
-            
+        """Comprueba si hay un gol"""
+        if puck.position[1] >= self.goal_y1 and puck.position[1] <= self.goal_y2:
+            if puck.position[0] <= 0:
+                return "ai"
+            elif puck.position[0] >= WIDTH:
+                return "player"
         return None
