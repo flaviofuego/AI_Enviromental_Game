@@ -10,7 +10,7 @@ class Mallet(pygame.sprite.Sprite):
     
     def __init__(self, x, y, color):
         super().__init__()
-        self.radius = 30
+        self.radius = MULLET_RADIUS
         self.image = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(self.image, color, (self.radius, self.radius), self.radius)
         # Añadir brillo al centro
