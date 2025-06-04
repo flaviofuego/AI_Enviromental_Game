@@ -12,6 +12,7 @@ from game.pages.home import HockeyMainScreen
 from game.pages.Level_Select import LevelSelectScreen
 from game.config.save_system import GameSaveSystem
 from game.components.AudioManager import audio_manager
+from main_improved import main as start_game
 
 def ice_melt_transition(screen, fade_out=True, duration=1.5):
     """Crea un efecto de transición temático con derretimiento de hielo"""
@@ -233,9 +234,15 @@ if __name__ == "__main__":
                 audio_manager.preload_audio_for_screen("gameplay")
                 
                 # Aquí implementarías la carga del nivel específico
+                # Extract level ID and start the game
                 level_id = int(result.split("_")[-1])
                 print(f"Iniciando nivel {level_id}")
-                # Por ahora, volvemos al menú principal
+                
+                # Start the game with the selected level
+                transition_effect(screen, fade_out=True)
+                start_game(level_id=level_id, debug_mode=False)
+                
+                # Return to menu after game ends
                 transition_effect(screen, fade_out=True)
                 current_screen = "home"
     
