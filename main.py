@@ -400,7 +400,7 @@ def main(use_rl=False, model_path=None):
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_f:
                     show_fps = not show_fps
-                elif event.key == pygame.K_r:
+                elif event.key == pygame.K_r and not game_over:  # Only allow reset when not in game over
                     # Complete reset
                     puck.reset(zero_velocity=True)
                     
@@ -419,7 +419,7 @@ def main(use_rl=False, model_path=None):
                     reset_message_timer = pygame.time.get_ticks()
                 elif event.key == pygame.K_ESCAPE:
                     running = False
-                elif event.key == pygame.K_m:
+                elif event.key == pygame.K_m and not game_over:  # Only allow model switch when not in game over
                     # Switch model type (if multiple available)
                     if use_rl:
                         print("Switching to next available model...")
@@ -446,202 +446,211 @@ def main(use_rl=False, model_path=None):
                                     except:
                                         continue
         
-        # Direct mouse polling for responsive human mallet
-        mouse_pos = pygame.mouse.get_pos()
-        human_mallet.update(mouse_pos)
-        
-        # AI mallet control logic - with frame skipping
-        frame_count = (frame_count + 1) % frame_skip
-        
-        if use_rl and model is not None and frame_count == 0:
-            current_time = pygame.time.get_ticks()
+        # Only update game state if not in game over
+        if not game_over:
+            # Direct mouse polling for responsive human mallet
+            mouse_pos = pygame.mouse.get_pos()
+            human_mallet.update(mouse_pos)
             
-            # Make predictions at specified intervals
-            if current_time - last_prediction_time > prediction_interval:
-                # Create observation based on model type
-                observation = create_observation_for_model(
-                    ai_mallet, puck, human_mallet, player_score, ai_score, model_type
-                )
+            # AI mallet control logic - with frame skipping
+            frame_count = (frame_count + 1) % frame_skip
+            
+            if use_rl and model is not None and frame_count == 0:
+                current_time = pygame.time.get_ticks()
                 
-                # Make prediction with error handling
-                try:
-                    action, _states = model.predict(observation, deterministic=True)
-                    # Convert numpy array to int if necessary
-                    if isinstance(action, np.ndarray):
-                        if action.ndim == 0:  # 0-dimensional array
-                            action = int(action.item())
+                # Make predictions at specified intervals
+                if current_time - last_prediction_time > prediction_interval:
+                    # Create observation based on model type
+                    observation = create_observation_for_model(
+                        ai_mallet, puck, human_mallet, player_score, ai_score, model_type
+                    )
+                    
+                    # Make prediction with error handling
+                    try:
+                        action, _states = model.predict(observation, deterministic=True)
+                        # Convert numpy array to int if necessary
+                        if isinstance(action, np.ndarray):
+                            if action.ndim == 0:  # 0-dimensional array
+                                action = int(action.item())
+                            else:
+                                action = int(action[0])
                         else:
-                            action = int(action[0])
-                    else:
-                        action = int(action)
-
-                    
-                    # BEHAVIORAL CORRECTION SYSTEM
-                    last_vertical_move += 1
-                    last_horizontal_move += 1
-                    movement_history.append(action)
-                    if len(movement_history) > 20:
-                        movement_history.pop(0)
-                    
-                    # Check if AI is stuck in the bottom of the field
-                    if ai_mallet.position[1] > HEIGHT * 0.75:
-                        stuck_in_bottom_counter += 1
-                    else:
-                        stuck_in_bottom_counter = 0
-                    
-                    # Check if AI is stuck on the sides (too close to AI goal or center line)
-                    if (ai_mallet.position[0] > WIDTH * 0.85 or  # Too close to AI goal
-                        ai_mallet.position[0] < WIDTH * 0.55):   # Too close to center line
-                        stuck_in_side_counter += 1
-                    else:
-                        stuck_in_side_counter = 0
-                    
-                    # Calculate distances and game state
-                    original_action = action
-                    y_distance = abs(puck.position[1] - ai_mallet.position[1])
-                    x_distance = abs(puck.position[0] - ai_mallet.position[0])
-                    puck_in_ai_half = puck.position[0] > WIDTH // 2
-                    
-                    # Count recent movements
-                    recent_vertical = sum(1 for a in movement_history[-10:] if a in [0, 1]) if len(movement_history) >= 10 else 0
-                    recent_horizontal = sum(1 for a in movement_history[-10:] if a in [2, 3]) if len(movement_history) >= 10 else 0
-                    
-                    # Force movement conditions
-                    force_vertical = False
-                    force_horizontal = False
-                    
-                    # VERTICAL MOVEMENT FORCING
-                    # 1. Puck is far vertically and AI hasn't moved vertically recently
-                    if (y_distance > force_vertical_threshold and 
-                        last_vertical_move > vertical_move_cooldown and 
-                        puck_in_ai_half and recent_vertical < 2):
-                        force_vertical = True
-                        reason = "puck_far_vertical"
-                    
-                    # 2. AI is stuck in bottom corner
-                    elif stuck_in_bottom_counter > 5 and recent_vertical == 0:
-                        force_vertical = True
-                        reason = "stuck_in_bottom"
-                    
-                    # 3. No vertical movement in recent history and puck is in AI half
-                    elif (len(movement_history) >= 15 and recent_vertical == 0 and 
-                          puck_in_ai_half and y_distance > 40):
-                        force_vertical = True
-                        reason = "no_recent_vertical"
-                    
-                    # HORIZONTAL MOVEMENT FORCING
-                    # 1. Puck is far horizontally and AI hasn't moved horizontally recently
-                    if (not force_vertical and x_distance > force_horizontal_threshold and 
-                        last_horizontal_move > horizontal_move_cooldown and 
-                        puck_in_ai_half and recent_horizontal < 2):
-                        force_horizontal = True
-                        reason = "puck_far_horizontal"
-                    
-                    # 2. AI is stuck on the sides
-                    elif (not force_vertical and stuck_in_side_counter > 5 and recent_horizontal == 0):
-                        force_horizontal = True
-                        reason = "stuck_in_side"
-                    
-                    # 3. No horizontal movement in recent history and puck is in AI half
-                    elif (not force_vertical and len(movement_history) >= 15 and recent_horizontal == 0 and 
-                          puck_in_ai_half and x_distance > 60):
-                        force_horizontal = True
-                        reason = "no_recent_horizontal"
-                    
-                    # Apply forced movements (vertical has priority)
-                    if force_vertical:
-                        if puck.position[1] < ai_mallet.position[1]:
-                            action = 0  # Up
-                        else:
-                            action = 1  # Down
-                        last_vertical_move = 0
+                            action = int(action)
                         
-                        # Debug info (optional)
-                        if show_fps:
-                            print(f"Forced vertical movement: {action} (reason: {reason})")
-                    
-                    elif force_horizontal:
-                        if puck.position[0] > ai_mallet.position[0]:
-                            action = 3  # Right
-                        else:
-                            action = 2  # Left
-                        last_horizontal_move = 0
+                        # BEHAVIORAL CORRECTION SYSTEM
+                        last_vertical_move += 1
+                        last_horizontal_move += 1
+                        movement_history.append(action)
+                        if len(movement_history) > 20:
+                            movement_history.pop(0)
                         
-                        # Debug info (optional)
-                        if show_fps:
-                            print(f"Forced horizontal movement: {action} (reason: {reason})")
+                        # Check if AI is stuck in the bottom of the field
+                        if ai_mallet.position[1] > HEIGHT * 0.75:
+                            stuck_in_bottom_counter += 1
+                        else:
+                            stuck_in_bottom_counter = 0
+                        
+                        # Check if AI is stuck on the sides (too close to AI goal or center line)
+                        if (ai_mallet.position[0] > WIDTH * 0.85 or  # Too close to AI goal
+                            ai_mallet.position[0] < WIDTH * 0.55):   # Too close to center line
+                            stuck_in_side_counter += 1
+                        else:
+                            stuck_in_side_counter = 0
+                        
+                        # Calculate distances and game state
+                        original_action = action
+                        y_distance = abs(puck.position[1] - ai_mallet.position[1])
+                        x_distance = abs(puck.position[0] - ai_mallet.position[0])
+                        puck_in_ai_half = puck.position[0] > WIDTH // 2
+                        
+                        # Count recent movements
+                        recent_vertical = sum(1 for a in movement_history[-10:] if a in [0, 1]) if len(movement_history) >= 10 else 0
+                        recent_horizontal = sum(1 for a in movement_history[-10:] if a in [2, 3]) if len(movement_history) >= 10 else 0
+                        
+                        # Force movement conditions
+                        force_vertical = False
+                        force_horizontal = False
+                        
+                        # VERTICAL MOVEMENT FORCING
+                        # 1. Puck is far vertically and AI hasn't moved vertically recently
+                        if (y_distance > force_vertical_threshold and 
+                            last_vertical_move > vertical_move_cooldown and 
+                            puck_in_ai_half and recent_vertical < 2):
+                            force_vertical = True
+                            reason = "puck_far_vertical"
+                        
+                        # 2. AI is stuck in bottom corner
+                        elif stuck_in_bottom_counter > 5 and recent_vertical == 0:
+                            force_vertical = True
+                            reason = "stuck_in_bottom"
+                        
+                        # 3. No vertical movement in recent history and puck is in AI half
+                        elif (len(movement_history) >= 15 and recent_vertical == 0 and 
+                              puck_in_ai_half and y_distance > 40):
+                            force_vertical = True
+                            reason = "no_recent_vertical"
+                        
+                        # HORIZONTAL MOVEMENT FORCING
+                        # 1. Puck is far horizontally and AI hasn't moved horizontally recently
+                        if (not force_vertical and x_distance > force_horizontal_threshold and 
+                            last_horizontal_move > horizontal_move_cooldown and 
+                            puck_in_ai_half and recent_horizontal < 2):
+                            force_horizontal = True
+                            reason = "puck_far_horizontal"
+                        
+                        # 2. AI is stuck on the sides
+                        elif (not force_vertical and stuck_in_side_counter > 5 and recent_horizontal == 0):
+                            force_horizontal = True
+                            reason = "stuck_in_side"
+                        
+                        # 3. No horizontal movement in recent history and puck is in AI half
+                        elif (not force_vertical and len(movement_history) >= 15 and recent_horizontal == 0 and 
+                              puck_in_ai_half and x_distance > 60):
+                            force_horizontal = True
+                            reason = "no_recent_horizontal"
+                        
+                        # Apply forced movements (vertical has priority)
+                        if force_vertical:
+                            if puck.position[1] < ai_mallet.position[1]:
+                                action = 0  # Up
+                            else:
+                                action = 1  # Down
+                            last_vertical_move = 0
+                            
+                            # Debug info (optional)
+                            if show_fps:
+                                print(f"Forced vertical movement: {action} (reason: {reason})")
+                        
+                        elif force_horizontal:
+                            if puck.position[0] > ai_mallet.position[0]:
+                                action = 3  # Right
+                            else:
+                                action = 2  # Left
+                            last_horizontal_move = 0
+                            
+                            # Debug info (optional)
+                            if show_fps:
+                                print(f"Forced horizontal movement: {action} (reason: {reason})")
+                        
+                        last_action = action
+                    except Exception as e:
+                        print(f"Prediction error: {e}")
                     
-                    last_action = action
-                except Exception as e:
-                    print(f"Prediction error: {e}")
+                    last_prediction_time = current_time
                 
-                last_prediction_time = current_time
+                # Apply the action with fixed step size
+                prev_position = ai_mallet.position.copy()
+                move_amount = 7
+                
+                if last_action == 0:  # Up
+                    ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
+                elif last_action == 1:  # Down
+                    ai_mallet.position[1] = min(ai_mallet.position[1] + move_amount, HEIGHT - ai_mallet.radius)
+                elif last_action == 2:  # Left
+                    ai_mallet.position[0] = max(ai_mallet.position[0] - move_amount, half_width + ai_mallet.radius)
+                elif last_action == 3:  # Right
+                    ai_mallet.position[0] = min(ai_mallet.position[0] + move_amount, WIDTH - ai_mallet.radius)
+                
+                # Update rect and calculate velocity
+                ai_mallet.rect.center = ai_mallet.position
+                ai_mallet.velocity = [
+                    (ai_mallet.position[0] - prev_position[0]),
+                    (ai_mallet.position[1] - prev_position[1])
+                ]
+            else:
+                # Use simple AI behavior when RL is not active
+                if not use_rl:
+                    ai_mallet.update(puck.position)
             
-            # Apply the action with fixed step size
-            prev_position = ai_mallet.position.copy()
-            move_amount = 7
+            # Fixed physics time stepping
+            current_time = time.time()
+            elapsed = current_time - last_physics_update
             
-            if last_action == 0:  # Up
-                ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
-            elif last_action == 1:  # Down
-                ai_mallet.position[1] = min(ai_mallet.position[1] + move_amount, HEIGHT - ai_mallet.radius)
-            elif last_action == 2:  # Left
-                ai_mallet.position[0] = max(ai_mallet.position[0] - move_amount, half_width + ai_mallet.radius)
-            elif last_action == 3:  # Right
-                ai_mallet.position[0] = min(ai_mallet.position[0] + move_amount, WIDTH - ai_mallet.radius)
+            if elapsed >= fixed_physics_step:
+                puck.update()
+                last_physics_update = current_time
             
-            # Update rect and calculate velocity
-            ai_mallet.rect.center = ai_mallet.position
-            ai_mallet.velocity = [
-                (ai_mallet.position[0] - prev_position[0]),
-                (ai_mallet.position[1] - prev_position[1])
-            ]
-        else:
-            # Use simple AI behavior when RL is not active
-            if not use_rl:
-                ai_mallet.update(puck.position)
-        
-        # Fixed physics time stepping
-        current_time = time.time()
-        elapsed = current_time - last_physics_update
-        
-        if elapsed >= fixed_physics_step:
-            puck.update()
-            last_physics_update = current_time
-        
-        # Check collisions
-        if puck.check_mallet_collision(human_mallet):
-            if vector_length(puck.velocity) < 2:
-                direction = normalize_vector([
-                    puck.position[0] - human_mallet.position[0],
-                    puck.position[1] - human_mallet.position[1]
-                ])
-                puck.velocity[0] += direction[0] * 1
-                puck.velocity[1] += direction[1] * 1
-        
-        if puck.check_mallet_collision(ai_mallet):
-            if vector_length(puck.velocity) < 2:
-                direction = normalize_vector([
-                    puck.position[0] - ai_mallet.position[0],
-                    puck.position[1] - ai_mallet.position[1]
-                ])
-                puck.velocity[0] += direction[0] * 1
-                puck.velocity[1] += direction[1] * 1
-        
-        # Check for goals
-        goal = table.is_goal(puck)
-        if goal == "player":
-            player_score += 1
-            puck.reset("player")
-            if player_score >= 7:
-                game_over = True
-                winner = "player"
-        elif goal == "ai":
-            ai_score += 1
-            puck.reset("ai")
-            if ai_score >= 7:
-                game_over = True
-                winner = "ai"
+            # Check collisions
+            if puck.check_mallet_collision(human_mallet):
+                if vector_length(puck.velocity) < 2:
+                    direction = normalize_vector([
+                        puck.position[0] - human_mallet.position[0],
+                        puck.position[1] - human_mallet.position[1]
+                    ])
+                    puck.velocity[0] += direction[0] * 1
+                    puck.velocity[1] += direction[1] * 1
+            
+            if puck.check_mallet_collision(ai_mallet):
+                if vector_length(puck.velocity) < 2:
+                    direction = normalize_vector([
+                        puck.position[0] - ai_mallet.position[0],
+                        puck.position[1] - ai_mallet.position[1]
+                    ])
+                    puck.velocity[0] += direction[0] * 1
+                    puck.velocity[1] += direction[1] * 1
+            
+            # Check for goals
+            goal = table.is_goal(puck)
+            if goal == "player":
+                player_score += 1
+                puck.reset("player")
+                if player_score >= 7:
+                    game_over = True
+                    winner = "player"
+                    # Stop puck and mallets when game is over
+                    puck.velocity = [0, 0]
+                    human_mallet.velocity = [0, 0]
+                    ai_mallet.velocity = [0, 0]
+            elif goal == "ai":
+                ai_score += 1
+                puck.reset("ai")
+                if ai_score >= 7:
+                    game_over = True
+                    winner = "ai"
+                    # Stop puck and mallets when game is over
+                    puck.velocity = [0, 0]
+                    human_mallet.velocity = [0, 0]
+                    ai_mallet.velocity = [0, 0]
         
         # Draw everything
         table.draw(screen)
