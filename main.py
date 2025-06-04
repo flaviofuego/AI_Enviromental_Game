@@ -345,6 +345,10 @@ def main(use_rl=False, model_path=None):
     player_score = 0
     ai_score = 0
     
+    # Game over state
+    game_over = False
+    winner = None
+    
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
@@ -372,6 +376,12 @@ def main(use_rl=False, model_path=None):
     # For reset message
     show_reset_message = False
     reset_message_timer = 0
+    
+    # Button dimensions for retry
+    button_width = 200
+    button_height = 50
+    button_x = WIDTH // 2 - button_width // 2
+    button_y = HEIGHT // 2 + 50
     
     # Main game loop
     running = True
@@ -623,9 +633,15 @@ def main(use_rl=False, model_path=None):
         if goal == "player":
             player_score += 1
             puck.reset("player")
+            if player_score >= 7:
+                game_over = True
+                winner = "player"
         elif goal == "ai":
             ai_score += 1
             puck.reset("ai")
+            if ai_score >= 7:
+                game_over = True
+                winner = "ai"
         
         # Draw everything
         table.draw(screen)
@@ -652,6 +668,51 @@ def main(use_rl=False, model_path=None):
         font = pygame.font.Font(None, 36)
         score_text = font.render(f"{player_score} - {ai_score}", True, WHITE)
         screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 20))
+        
+        # Draw game over screen if game is over
+        if game_over:
+            # Semi-transparent overlay
+            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 128))
+            screen.blit(overlay, (0, 0))
+            
+            # Game over text
+            game_over_text = "¡Has Ganado!" if winner == "player" else "¡Has Perdido!"
+            game_over_surface = font.render(game_over_text, True, WHITE)
+            game_over_rect = game_over_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 50))
+            screen.blit(game_over_surface, game_over_rect)
+            
+            # Draw retry button
+            pygame.draw.rect(screen, (50, 50, 50), (button_x, button_y, button_width, button_height))
+            pygame.draw.rect(screen, WHITE, (button_x, button_y, button_width, button_height), 2)
+            retry_text = font.render("Reintentar", True, WHITE)
+            retry_rect = retry_text.get_rect(center=(WIDTH // 2, button_y + button_height // 2))
+            screen.blit(retry_text, retry_rect)
+            
+            # Check for button click
+            mouse_clicked = pygame.mouse.get_pressed()[0]
+            button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+            
+            if button_rect.collidepoint(mouse_pos):
+                pygame.draw.rect(screen, (70, 70, 70), (button_x, button_y, button_width, button_height))
+                pygame.draw.rect(screen, WHITE, (button_x, button_y, button_width, button_height), 2)
+                screen.blit(retry_text, retry_rect)
+                
+                if mouse_clicked:
+                    # Reset game
+                    player_score = 0
+                    ai_score = 0
+                    game_over = False
+                    winner = None
+                    puck.reset(zero_velocity=True)
+                    human_mallet.position = [WIDTH // 4, HEIGHT // 2]
+                    human_mallet.rect.center = human_mallet.position
+                    ai_mallet.position = [WIDTH * 3 // 4, HEIGHT // 2]
+                    ai_mallet.rect.center = ai_mallet.position
+                    human_mallet.velocity = [0, 0]
+                    ai_mallet.velocity = [0, 0]
+                    show_reset_message = True
+                    reset_message_timer = pygame.time.get_ticks()
         
         # Show model type and mode
         if use_rl:
