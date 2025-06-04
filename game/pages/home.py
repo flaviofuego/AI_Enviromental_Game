@@ -8,6 +8,7 @@ import time
 
 from ..config.save_system import GameSaveSystem
 from ..components.Button import Button
+from ..components.PopUp import PopUp, create_help_popup
 
 class HockeyMainScreen:
     def __init__(self, screen=None, save_system=None):
@@ -139,6 +140,7 @@ class HockeyMainScreen:
         # Paneles
         self.show_gaia_panel = False
         self.show_progress_panel = True
+        self.help_popup = None
         
         # Cargar perfiles al iniciar
         self.load_profiles()
@@ -431,7 +433,7 @@ class HockeyMainScreen:
         """Dibujar fondo animado con efectos ambientales"""
         
         # Dibujar el gradiente base
-        self.draw_gradient_background()
+        #self.draw_gradient_background()
         
         # Dibujar la imagen de fondo con transparencia
         if self.background_image:
@@ -576,17 +578,6 @@ class HockeyMainScreen:
                 self.screen.blit(sparkle_surface, 
                                (sparkle['x'] - sparkle['size'] * 2, sparkle['y'] - sparkle['size'] * 2))
 
-    def draw_gradient_background(self):
-        """Dibujar fondo con gradiente dramático"""
-        for y in range(self.screen_height):
-            ratio = y / self.screen_height
-            color = [
-                int(self.colors['bg_gradient_top'][i] * (1 - ratio) + 
-                    self.colors['bg_gradient_bottom'][i] * ratio)
-                for i in range(3)
-            ]
-            pygame.draw.line(self.screen, color, (0, y), (self.screen_width, y))
-    
     def draw_particles(self):
         """Dibujar y animar partículas atmosféricas"""
         for particle in self.particles:
@@ -837,7 +828,6 @@ class HockeyMainScreen:
     def handle_click(self, pos):
         """Manejar clics en botones del menú principal"""
         for button_key, button in self.buttons.items():
-            distance = math.sqrt((pos[0] - button['pos'][0])**2 + (pos[1] - button['pos'][1])**2)
             if button['object'].is_clicked(pos):
                 if button_key == 'play':
                     print("Iniciando selección de niveles...")
@@ -861,6 +851,8 @@ class HockeyMainScreen:
                     return 'settings'
                 elif button_key == 'help':
                     print("Abriendo ayuda...")
+                    self.help_popup = create_help_popup(self.screen, "home")
+                    self.help_popup.show()
                     return 'help'
                 elif button_key == 'background':
                     # Cambiar la opacidad del fondo al hacer clic
@@ -1146,6 +1138,29 @@ class HockeyMainScreen:
             
             self.screen.blit(success_surface, success_rect)
 
+    def draw_active_profile(self):
+        """Dibujar el perfil activo en la esquina inferior izquierda"""
+        if self.save_system.current_profile:
+            profile_name = self.save_system.current_profile["player_name"]
+            profile_text = f"Agente: {profile_name}"
+            
+            # Crear superficie para el fondo del mensaje
+            profile_surface = self.font_text.render(profile_text, True, self.colors['text_gold'])
+            profile_rect = profile_surface.get_rect()
+            profile_rect.bottomleft = (20, self.screen_height - 20)
+            
+            # Dibujar fondo semi-transparente
+            bg_rect = profile_rect.inflate(20, 10)
+            bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
+            bg_surface.fill((20, 20, 40, 200))
+            self.screen.blit(bg_surface, bg_rect)
+            
+            # Dibujar borde
+            pygame.draw.rect(self.screen, self.colors['ice_blue'], bg_rect, 1)
+            
+            # Dibujar texto
+            self.screen.blit(profile_surface, profile_rect)
+
     def run(self):
         """Bucle principal del menú"""
         running = True
@@ -1165,11 +1180,25 @@ class HockeyMainScreen:
             # Actualizar efectos ambientales
             self.update_environmental_effects(dt)
             
+            # Actualizar popup si existe
+            if self.help_popup:
+                popup_result = self.help_popup.update(dt)
+                if popup_result == "closed":
+                    self.help_popup = None
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                     result = "exit"  # Añadido para señalar salida del juego
                 
+                # Manejar eventos del popup si está visible
+                if self.help_popup and self.help_popup.is_visible():
+                    popup_action = self.help_popup.handle_event(event)
+                    if popup_action == "more_info":
+                        # Aquí podrías implementar alguna acción adicional
+                        pass
+                    continue  # Si el popup está visible, no procesar otros eventos
+
                 # Manejo de eventos según la pantalla actual
                 if self.current_screen == "main":
                     if event.type == pygame.MOUSEBUTTONDOWN:
@@ -1213,28 +1242,11 @@ class HockeyMainScreen:
                 self.draw_gaia_panel()
                 self.draw_progress_panel()
                 self.draw_climate_warning()
-                
-                # Mostrar mensaje del perfil activo en la esquina inferior izquierda
-                if self.save_system.current_profile:
-                    profile_name = self.save_system.current_profile["player_name"]
-                    profile_text = f"Agente: {profile_name}"
-                    
-                    # Crear superficie para el fondo del mensaje
-                    profile_surface = self.font_text.render(profile_text, True, self.colors['text_gold'])
-                    profile_rect = profile_surface.get_rect()
-                    profile_rect.bottomleft = (20, self.screen_height - 20)
-                    
-                    # Dibujar fondo semi-transparente
-                    bg_rect = profile_rect.inflate(20, 10)
-                    bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
-                    bg_surface.fill((20, 20, 40, 200))
-                    self.screen.blit(bg_surface, bg_rect)
-                    
-                    # Dibujar borde
-                    pygame.draw.rect(self.screen, self.colors['ice_blue'], bg_rect, 1)
-                    
-                    # Dibujar texto
-                    self.screen.blit(profile_surface, profile_rect)
+                self.draw_active_profile()
+
+                # Dibujar popup de ayuda si está visible
+                if self.help_popup:
+                    self.help_popup.draw()
                 
             elif self.current_screen == "profiles":
                 self.draw_profiles_screen()
@@ -1242,8 +1254,8 @@ class HockeyMainScreen:
             elif self.current_screen == "create_profile":
                 self.draw_create_profile_screen()
             
-            # Mostrar mensajes generales
-            
+            # Mostrar mensajes generales   
+            self.draw_messages()            
             
             pygame.display.flip()
         
