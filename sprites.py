@@ -76,83 +76,102 @@ class AIMallet(Mallet):
     def __init__(self, custom_image=None, reaction_speed=None, prediction_factor=None):
         current_width, current_height = get_screen_dimensions()
         super().__init__(current_width * 3 // 4, current_height // 2, NEON_GREEN, custom_image)
-        self.reaction_speed = reaction_speed if reaction_speed is not None else 0.18
-        self.prediction_factor = prediction_factor if prediction_factor is not None else 0.5
+        self.reaction_speed = reaction_speed if reaction_speed is not None else 0.16
+        self.prediction_factor = prediction_factor if prediction_factor is not None else 0.4
+        self.last_position_update = 0
+        self.defensive_position = [current_width * 3 // 4, current_height // 2]
         
     def update(self, puck_pos, puck_velocity=None):
         current_width, current_height = get_screen_dimensions()
         self.prev_position = self.position.copy()
         
-        # Movimiento mejorado con predicción
+        # Comportamiento mejorado y más consistente
         if puck_pos:
-            # Solo reaccionar si el puck está en su mitad o acercándose
+            # Determinar estado del juego
             puck_in_ai_half = puck_pos[0] > current_width // 2
             puck_approaching = puck_velocity and puck_velocity[0] > 0 if puck_velocity else False
+            puck_speed = math.sqrt(puck_velocity[0]**2 + puck_velocity[1]**2) if puck_velocity else 0
             
-            if puck_in_ai_half or puck_approaching:
-                # Detectar si el puck está cerca de una esquina
-                is_near_corner = (
-                    (puck_pos[0] < self.radius*3 or puck_pos[0] > current_width - self.radius*3) and 
-                    (puck_pos[1] < self.radius*3 or puck_pos[1] > current_height - self.radius*3)
-                )
+            # Calcular distancia al puck
+            distance_to_puck = math.sqrt((puck_pos[0] - self.position[0])**2 + 
+                                       (puck_pos[1] - self.position[1])**2)
+            
+            # Modo agresivo: puck en territorio de IA o acercándose rápido
+            aggressive_mode = (puck_in_ai_half or 
+                             (puck_approaching and puck_speed > 3) or
+                             distance_to_puck < 150)
+            
+            if aggressive_mode:
+                # Predicción inteligente de trayectoria
+                target_x = puck_pos[0]
+                target_y = puck_pos[1]
                 
-                if is_near_corner:
-                    # Estrategia de esquina: moverse hacia el centro
-                    target_x = current_width * 3 // 4
-                    target_y = current_height // 2
+                # Si tenemos velocidad del puck, hacer predicción avanzada
+                if puck_velocity and puck_speed > 1:
+                    # Tiempo estimado para interceptar basado en distancia y velocidad de IA
+                    ai_speed = self.reaction_speed * 100
+                    time_to_intercept = distance_to_puck / max(ai_speed, 20)
                     
-                    # Moverse más rápido cuando está en esquina
-                    self.position[0] += (target_x - self.position[0]) * self.reaction_speed * 1.5
-                    self.position[1] += (target_y - self.position[1]) * self.reaction_speed * 1.5
-                else:
-                    # Predicción de trayectoria mejorada
-                    target_x = puck_pos[0]
-                    target_y = puck_pos[1]
+                    # Predecir posición futura del puck
+                    predicted_x = puck_pos[0] + puck_velocity[0] * time_to_intercept * self.prediction_factor
+                    predicted_y = puck_pos[1] + puck_velocity[1] * time_to_intercept * self.prediction_factor
                     
-                    # Si tenemos velocidad del puck, predecir dónde estará
-                    if puck_velocity:
-                        # Calcular tiempo estimado para interceptar
-                        distance_to_puck = math.sqrt((puck_pos[0] - self.position[0])**2 + 
-                                                   (puck_pos[1] - self.position[1])**2)
-                        time_to_intercept = distance_to_puck / (self.reaction_speed * 100)
+                    # Ajustar predicción si el puck va hacia los bordes
+                    if predicted_x < self.radius:
+                        predicted_x = self.radius + 50  # Anticipar rebote
+                    elif predicted_x > current_width - self.radius:
+                        predicted_x = current_width - self.radius - 50
                         
-                        # Predecir posición futura
-                        predicted_x = puck_pos[0] + puck_velocity[0] * time_to_intercept * self.prediction_factor
-                        predicted_y = puck_pos[1] + puck_velocity[1] * time_to_intercept * self.prediction_factor
-                        
-                        # Limitar predicción a los límites del campo
-                        target_x = min(max(predicted_x, current_width // 2 + self.radius), 
-                                     current_width - self.radius)
-                        target_y = min(max(predicted_y, self.radius), 
-                                     current_height - self.radius)
+                    if predicted_y < self.radius:
+                        predicted_y = self.radius + 50
+                    elif predicted_y > current_height - self.radius:
+                        predicted_y = current_height - self.radius - 50
                     
-                    # Añadir algo de aleatoriedad para hacer la IA menos perfecta
-                    target_x += random.randint(-15, 15)
-                    target_y += random.randint(-15, 15)
-                    
-                    # Asegurar que el target esté dentro de los límites
-                    target_x = min(max(target_x, current_width // 2 + self.radius), 
-                                 current_width - self.radius)
-                    target_y = min(max(target_y, self.radius), 
-                                 current_height - self.radius)
-                    
-                    # Mover hacia el objetivo con velocidad mejorada
-                    self.position[0] += (target_x - self.position[0]) * self.reaction_speed
-                    self.position[1] += (target_y - self.position[1]) * self.reaction_speed
+                    target_x = predicted_x
+                    target_y = predicted_y
+                
+                # Limitar target a territorio de IA
+                target_x = min(max(target_x, current_width // 2 + self.radius), 
+                             current_width - self.radius)
+                target_y = min(max(target_y, self.radius), 
+                             current_height - self.radius)
+                
+                # Movimiento suave hacia el objetivo
+                movement_factor = self.reaction_speed
+                
+                # Si está muy cerca del puck, moverse más rápido
+                if distance_to_puck < 80:
+                    movement_factor *= 1.5
+                
+                self.position[0] += (target_x - self.position[0]) * movement_factor
+                self.position[1] += (target_y - self.position[1]) * movement_factor
+                
             else:
-                # Posición defensiva cuando el puck está en la otra mitad
-                defense_x = current_width * 3 // 4
-                defense_y = current_height // 2
+                # Modo defensivo: posicionarse estratégicamente
+                # Actualizar posición defensiva basada en el puck
+                if puck_pos[1] < current_height * 0.25:
+                    self.defensive_position[1] = current_height * 0.3
+                elif puck_pos[1] > current_height * 0.75:
+                    self.defensive_position[1] = current_height * 0.7
+                else:
+                    # Seguir verticalmente al puck pero mantenerse en posición defensiva
+                    target_defensive_y = puck_pos[1]
+                    # Suavizar el movimiento defensivo
+                    self.defensive_position[1] += (target_defensive_y - self.defensive_position[1]) * 0.1
                 
-                # Ajustar posición defensiva basada en la posición del puck
-                if puck_pos[1] < current_height * 0.3:
-                    defense_y = current_height * 0.35
-                elif puck_pos[1] > current_height * 0.7:
-                    defense_y = current_height * 0.65
+                # Mantener posición horizontal defensiva
+                self.defensive_position[0] = current_width * 0.75
                 
-                # Moverse a posición defensiva más lentamente
-                self.position[0] += (defense_x - self.position[0]) * self.reaction_speed * 0.5
-                self.position[1] += (defense_y - self.position[1]) * self.reaction_speed * 0.5
+                # Moverse hacia posición defensiva más lentamente
+                defense_speed = self.reaction_speed * 0.6
+                self.position[0] += (self.defensive_position[0] - self.position[0]) * defense_speed
+                self.position[1] += (self.defensive_position[1] - self.position[1]) * defense_speed
+            
+            # Aplicar límites finales
+            self.position[0] = min(max(self.position[0], current_width // 2 + self.radius), 
+                                 current_width - self.radius)
+            self.position[1] = min(max(self.position[1], self.radius), 
+                                 current_height - self.radius)
             
             self.rect.center = self.position
             

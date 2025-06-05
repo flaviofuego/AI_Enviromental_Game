@@ -21,8 +21,9 @@ LEVELS = {
             }
         },
         "difficulty": 1,
-        "ai_reaction_speed": 0.28,  # IA más lenta
-        "ai_prediction_factor": 0.5
+        "ai_reaction_speed": 0.08,  # IA más lenta (menor valor = más lenta)
+        "ai_prediction_factor": 0.2,  # Predicción básica
+        "ai_move_speed": 5
     },
     2: {
         "name": "Forest Guardian",
@@ -42,8 +43,9 @@ LEVELS = {
             }
         },
         "difficulty": 2,
-        "ai_reaction_speed": 0.10,  # IA velocidad media
-        "ai_prediction_factor": 0.3
+        "ai_reaction_speed": 0.12,  # IA velocidad media
+        "ai_prediction_factor": 0.35,  # Predicción mejorada
+        "ai_move_speed": 6
     },
     3: {
         "name": "Ocean Defense",
@@ -63,8 +65,9 @@ LEVELS = {
             }
         },
         "difficulty": 3,
-        "ai_reaction_speed": 0.12,  # IA más rápida
-        "ai_prediction_factor": 0.35
+        "ai_reaction_speed": 0.16,  # IA más rápida
+        "ai_prediction_factor": 0.45,  # Predicción avanzada
+        "ai_move_speed": 7
     },
     4: {
         "name": "City Heat Island",
@@ -84,8 +87,9 @@ LEVELS = {
             }
         },
         "difficulty": 4,
-        "ai_reaction_speed": 0.15,  # IA muy rápida
-        "ai_prediction_factor": 0.4
+        "ai_reaction_speed": 0.20,  # IA muy rápida
+        "ai_prediction_factor": 0.55,  # Predicción superior
+        "ai_move_speed": 8
     },
     5: {
         "name": "Final Stand",
@@ -105,8 +109,9 @@ LEVELS = {
             }
         },
         "difficulty": 5,
-        "ai_reaction_speed": 0.18,  # IA máxima velocidad
-        "ai_prediction_factor": 0.5
+        "ai_reaction_speed": 0.25,  # IA máxima velocidad
+        "ai_prediction_factor": 0.65,  # Predicción experta
+        "ai_move_speed": 9
     }
 }
 

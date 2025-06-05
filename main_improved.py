@@ -543,9 +543,9 @@ def main(level_id=None, debug_mode=True, use_rl=True):
                     
                     last_prediction_time = current_time
                 
-                # Apply the action with fixed step size
+                # Apply the action with dynamic step size based on level
                 prev_position = ai_mallet.position.copy()
-                move_amount = 9  # Aumentado de 7 para movimiento más rápido
+                move_amount = ai_move_speed  # Usar velocidad de movimiento del nivel
                 
                 if last_action == 0:  # Up
                     ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
@@ -1078,10 +1078,11 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     human_mallet = HumanMallet(color=mallet_color)    
     
     ai_mallet_image = custom_sprites.get('mallet_ai', None)
-    ai_reaction_speed = level_config.get('ai_reaction_speed', None) if level_config else None
-    print(ai_reaction_speed,"esta es la reaccion")
-    ai_prediction_factor = level_config.get('ai_prediction_factor', None) if level_config else None
-    print(ai_prediction_factor,"esta es la prediccion")
+    ai_reaction_speed = level_config.get('ai_reaction_speed', 0.16) if level_config else 0.16
+    ai_prediction_factor = level_config.get('ai_prediction_factor', 0.4) if level_config else 0.4
+    ai_move_speed = level_config.get('ai_move_speed', 7) if level_config else 7
+    
+    print(f"IA Config - Velocidad: {ai_reaction_speed}, Predicción: {ai_prediction_factor}, Movimiento: {ai_move_speed}")
     
     ai_mallet = AIMallet(custom_image=ai_mallet_image, 
                         reaction_speed=ai_reaction_speed,
@@ -1128,12 +1129,12 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     last_prediction_time = 0
     prediction_interval = 15  # ms between predictions (reducido de 20 para más responsividad)
     
-    # Behavioral correction system
-    force_vertical_threshold = 80  # Force vertical movement if puck is this far vertically
-    vertical_move_cooldown = 15  # Frames between forced vertical moves
+    # Behavioral correction system (optimizado y menos agresivo)
+    force_vertical_threshold = 120  # Aumentado para ser menos agresivo 
+    vertical_move_cooldown = 25  # Más tiempo entre correcciones
     last_vertical_move = 100  # Time since last vertical move
-    force_horizontal_threshold = 120  # Force horizontal movement if puck is this far horizontally
-    horizontal_move_cooldown = 15  # Frames between forced horizontal moves
+    force_horizontal_threshold = 160  # Aumentado para ser menos agresivo
+    horizontal_move_cooldown = 25  # Más tiempo entre correcciones
     last_horizontal_move = 100  # Time since last horizontal move
     movement_history = []  # Track recent actions
     stuck_in_bottom_counter = 0  # Counter for being stuck in bottom
@@ -1260,33 +1261,26 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                         force_horizontal = False
                         reason = ""
                         
-                        # VERTICAL MOVEMENT FORCING
+                        # CORRECCIONES SIMPLIFICADAS Y MENOS AGRESIVAS
+                        # Solo corregir cuando realmente está atascado y el puck está cerca
                         if (y_distance > force_vertical_threshold and 
                             last_vertical_move > vertical_move_cooldown and 
-                            puck_in_ai_half and recent_vertical < 2):
+                            puck_in_ai_half and recent_vertical == 0):
                             force_vertical = True
                             reason = "puck_far_vertical"
-                        elif stuck_in_bottom_counter > 5 and recent_vertical == 0:
+                        elif stuck_in_bottom_counter > 8:  # Más tolerante
                             force_vertical = True
                             reason = "stuck_in_bottom"
-                        elif (len(movement_history) >= 15 and recent_vertical == 0 and 
-                              puck_in_ai_half and y_distance > 40):
-                            force_vertical = True
-                            reason = "no_recent_vertical"
                         
-                        # HORIZONTAL MOVEMENT FORCING
+                        # HORIZONTAL MOVEMENT FORCING (solo si no está forzando vertical)
                         if (not force_vertical and x_distance > force_horizontal_threshold and 
                             last_horizontal_move > horizontal_move_cooldown and 
-                            puck_in_ai_half and recent_horizontal < 2):
+                            puck_in_ai_half and recent_horizontal == 0):
                             force_horizontal = True
                             reason = "puck_far_horizontal"
-                        elif (not force_vertical and stuck_in_side_counter > 5 and recent_horizontal == 0):
+                        elif (not force_vertical and stuck_in_side_counter > 8):  # Más tolerante
                             force_horizontal = True
                             reason = "stuck_in_side"
-                        elif (not force_vertical and len(movement_history) >= 15 and recent_horizontal == 0 and 
-                              puck_in_ai_half and x_distance > 60):
-                            force_horizontal = True
-                            reason = "no_recent_horizontal"
                         
                         # Apply forced movements (vertical has priority)
                         if force_vertical:
@@ -1308,9 +1302,9 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                     
                     last_prediction_time = current_time
                 
-                # Apply the action with fixed step size
+                # Apply the action with dynamic step size based on level
                 prev_position = ai_mallet.position.copy()
-                move_amount = 9  # Aumentado de 7 para movimiento más rápido
+                move_amount = ai_move_speed  # Usar velocidad de movimiento del nivel
                 
                 if last_action == 0:  # Up
                     ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
