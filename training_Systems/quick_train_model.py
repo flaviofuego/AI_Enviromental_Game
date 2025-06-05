@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # quick_train.py - Script de entrenamiento rapido
 
-from improved_training_system import train_improved_agent
+from training_Systems.improved_training_system import train_improved_agent
 import argparse
 
 def main():

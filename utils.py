@@ -3,13 +3,14 @@ import math
 from constants import *
 
 def draw_glow(surface, color, position, radius):
-    """Dibuja un efecto de resplandor alrededor de un objeto"""
-    for i in range(4):
-        alpha = 100 - i * 25
+    """Dibuja un efecto de resplandor alrededor de un objeto - versión optimizada"""
+    # Reducir capas de 4 a 2 para mejor rendimiento
+    for i in range(2):
+        alpha = 80 - i * 40  # Ajustar alpha para 2 capas
         if alpha > 0:
-            s = pygame.Surface((radius*2 + i*4, radius*2 + i*4), pygame.SRCALPHA)
-            pygame.draw.circle(s, (*color, alpha), (radius + i*2, radius + i*2), radius + i*2)
-            surface.blit(s, (position[0] - radius - i*2, position[1] - radius - i*2))
+            s = pygame.Surface((radius*2 + i*6, radius*2 + i*6), pygame.SRCALPHA)
+            pygame.draw.circle(s, (*color, alpha), (radius + i*3, radius + i*3), radius + i*3)
+            surface.blit(s, (position[0] - radius - i*3, position[1] - radius - i*3))
 
 def calculate_vector(p1, p2):
     """Calcula el vector desde p1 hasta p2"""

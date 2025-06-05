@@ -6,7 +6,7 @@ import os
 import time
 from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
-from ..improved_training_system import ImprovedAirHockeyEnv, create_improved_env
+from ..training_Systems.improved_training_system import ImprovedAirHockeyEnv, create_improved_env
 from air_hockey_env import AirHockeyEnv
 import seaborn as sns
 
