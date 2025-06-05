@@ -212,7 +212,7 @@ class ThemedGame:
             screen.fill(self.config["theme"]["table_color"])
         
         # Draw table elements
-        self.table.draw(screen)
+        self.table.draw(screen, debug_mode=self.debug_mode if hasattr(self, 'debug_mode') else False)
     
     def draw_themed_glows(self, screen):
         """Draw themed glow effects"""
@@ -288,6 +288,9 @@ class ThemedGame:
                         ])
                         self.puck.velocity[0] += direction[0] * 1
                         self.puck.velocity[1] += direction[1] * 1
+                
+                # Check for goal collision (rebote en estructuras de porterías)
+                self.table.check_goal_collision(self.puck)
                 
                 # Check for goals
                 goal = self.table.is_goal(self.puck)

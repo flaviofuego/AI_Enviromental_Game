@@ -600,6 +600,9 @@ def main(level_id=None, debug_mode=True, use_rl=True):
                     puck.velocity[0] += direction[0] * 1
                     puck.velocity[1] += direction[1] * 1
             
+            # Check for goal collision (rebote en estructuras de porterías)
+            table.check_goal_collision(puck)
+            
             # Check for goals
             goal = table.is_goal(puck)
             if goal == "player":
@@ -629,10 +632,10 @@ def main(level_id=None, debug_mode=True, use_rl=True):
         if has_custom_background:
             screen.blit(custom_sprites['background'], (0, 0))
             # No dibujar fondo sólido en la mesa porque ya tenemos fondo personalizado
-            table.draw(screen, draw_background=False)
+            table.draw(screen, draw_background=False, debug_mode=show_fps)
         else:
             # Si no hay fondo personalizado, dejar que la mesa dibuje su fondo
-            table.draw(screen, draw_background=True)
+            table.draw(screen, draw_background=True, debug_mode=show_fps)
         
         # Draw glows - optimizado para mejor rendimiento
         current_fps = clock.get_fps()
@@ -1337,6 +1340,9 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                     puck.velocity[0] += direction[0] * 1
                     puck.velocity[1] += direction[1] * 1
             
+            # Check for goal collision (rebote en estructuras de porterías)
+            table.check_goal_collision(puck)
+            
             # Check for goals
             goal = table.is_goal(puck)
             if goal == "player":
@@ -1366,10 +1372,10 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
         if has_custom_background:
             screen.blit(custom_sprites['background'], (0, 0))
             # No dibujar fondo sólido en la mesa porque ya tenemos fondo personalizado
-            table.draw(screen, draw_background=False)
+            table.draw(screen, draw_background=False, debug_mode=show_fps)
         else:
             # Si no hay fondo personalizado, dejar que la mesa dibuje su fondo
-            table.draw(screen, draw_background=True)
+            table.draw(screen, draw_background=True, debug_mode=show_fps)
         
         # Draw glows - optimizado para mejor rendimiento
         current_fps = clock.get_fps()
