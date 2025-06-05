@@ -1,7 +1,7 @@
 import pygame
 
 class Button(pygame.sprite.Sprite):
-    def __init__(self, image: str, scale: tuple, position: tuple, tex_hover: str):
+    def __init__(self, image: str, scale: tuple, position: tuple, tex_hover: str, help_callback=None):
         super(Button, self).__init__()
         # Cargar y guardar la imagen original sin modificar
         self.original_image = pygame.image.load(f"game/assets/{image}.png")
@@ -15,6 +15,7 @@ class Button(pygame.sprite.Sprite):
         self.clicked = False
         self.tex_hover = tex_hover
         self.is_hovering = False  # Estado de hover
+        self.help_callback = help_callback  # Callback para mostrar ayuda
 
         # Fuente
         self.font_small = pygame.font.SysFont('Arial', 14)
@@ -58,6 +59,13 @@ class Button(pygame.sprite.Sprite):
   
         surface.blit(self.image, self.rect)
         return action
+    
+    def handle_right_click(self, pos):
+        """Manejar clic derecho para mostrar ayuda"""
+        if self.rect.collidepoint(pos) and self.help_callback:
+            self.help_callback()
+            return True
+        return False
     
     def reset(self):
         """Reset the button state."""

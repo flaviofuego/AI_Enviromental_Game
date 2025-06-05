@@ -78,7 +78,7 @@ def run_quick_test():
     
     try:
         # Importar el sistema mejorado
-        from improved_training_system import ImprovedAirHockeyEnv
+        from training_Systems.improved_training_system import ImprovedAirHockeyEnv
         
         # Crear entorno de prueba
         env = ImprovedAirHockeyEnv()

@@ -281,18 +281,7 @@ def find_best_model():
     
     return None, None
 
-def draw_round_button(screen, color, center, radius, text, font_size=36):
-    """Dibuja un botón circular con texto centrado"""
-    pygame.draw.circle(screen, color, center, radius)
-    pygame.draw.circle(screen, WHITE, center, radius, 2)  # Borde blanco
-    
-    font = pygame.font.Font(None, font_size)
-    text_surface = font.render(text, True, WHITE)
-    text_rect = text_surface.get_rect(center=center)
-    screen.blit(text_surface, text_rect)
-    return pygame.Rect(center[0]-radius, center[1]-radius, radius*2, radius*2)
-
-def main(use_rl=False, model_path=None):
+def main(level_id=None, debug_mode=True, use_rl=True):
     """Main game function with support for improved models"""
     # Initialize pygame
     pygame.init()
@@ -312,41 +301,31 @@ def main(use_rl=False, model_path=None):
     model = None
     model_type = "original"
     
-    if use_rl:
-        try:
-            print("Loading RL model...")
+    try:
+        print("Loading RL model...")
+        
+        # Auto-detect best model
+        model_path, model_type = find_best_model()
+        if model_path:
+            model, model_type = load_optimized_model(model_path)
+            print(f"Auto-selected model: {model_path}")
+            print("Model loaded successfully!")
+            print(f"Model type: {model_type}")
             
-            # Use specified model or find best available
-            if model_path and os.path.exists(model_path):
-                model, model_type = load_optimized_model(model_path)
+            # Pre-warm the model
+            if model_type == "enhanced":
+                dummy_obs = np.zeros((21,), dtype=np.float32)
+            elif model_type == "improved":
+                dummy_obs = np.zeros((21,), dtype=np.float32)
             else:
-                auto_model_path, auto_model_type = find_best_model()
-                if auto_model_path:
-                    model, model_type = load_optimized_model(auto_model_path, auto_model_type)
-                    print(f"Auto-selected model: {auto_model_path}")
-                else:
-                    print("No model file found")
-                    use_rl = False
-                    
-            if model:
-                print("Model loaded successfully!")
-                print(f"Model type: {model_type}")
-                
-                # Pre-warm the model with appropriate observation size
-                if model_type == "enhanced":
-                    dummy_obs = np.zeros((21,), dtype=np.float32)
-                elif model_type == "improved":
-                    dummy_obs = np.zeros((21,), dtype=np.float32)
-                else:
-                    dummy_obs = np.zeros((13,), dtype=np.float32)
-                model.predict(dummy_obs, deterministic=True)
-            else:
-                print("Failed to load model")
-                use_rl = False
-        except Exception as e:
-            print(f"Error loading model: {e}")
-            use_rl = False
-            print("Falling back to simple AI")
+                dummy_obs = np.zeros((13,), dtype=np.float32)
+            model.predict(dummy_obs, deterministic=True)
+        else:
+            print("No model file found")
+            return
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        return
     
     # Sprite group
     all_sprites = pygame.sprite.Group()
@@ -356,41 +335,37 @@ def main(use_rl=False, model_path=None):
     player_score = 0
     ai_score = 0
     
-    # Game over state
-    game_over = False
-    winner = None
-    paused = False 
-    waiting_for_resume_click = False  
-    resume_target_pos = None 
-    resume_target_radius = 20 
-
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
-    prediction_interval = 20  # ms between predictions
+    prediction_interval = 15  # ms between predictions (reducido de 20 para más responsividad)
     
     # Behavioral correction system
-    force_vertical_threshold = 80  # Force vertical movement if puck is this far vertically
-    vertical_move_cooldown = 15  # Frames between forced vertical moves
-    last_vertical_move = 100  # Time since last vertical move
-    force_horizontal_threshold = 120  # Force horizontal movement if puck is this far horizontally
-    horizontal_move_cooldown = 15  # Frames between forced horizontal moves
-    last_horizontal_move = 100  # Time since last horizontal move
-    movement_history = []  # Track recent actions
-    stuck_in_bottom_counter = 0  # Counter for being stuck in bottom
-    stuck_in_side_counter = 0  # Counter for being stuck in side
+    force_vertical_threshold = 80
+    vertical_move_cooldown = 15
+    last_vertical_move = 100
+    force_horizontal_threshold = 120
+    horizontal_move_cooldown = 15
+    last_horizontal_move = 100
+    movement_history = []
+    stuck_in_bottom_counter = 0
+    stuck_in_side_counter = 0
     
     # Frame skip for AI updates
     frame_count = 0
-    frame_skip = 2
+    frame_skip = 1  # Reducido de 2 para actualizaciones más frecuentes
     
     # Physics time step control
     last_physics_update = time.time()
-    fixed_physics_step = 1/120
+    fixed_physics_step = 1/120  # Ajustado para 120 FPS
     
     # For reset message
     show_reset_message = False
     reset_message_timer = 0
+    
+    # Game over state
+    game_over = False
+    winner = None
     
     # Button dimensions for retry
     button_width = 200
@@ -402,8 +377,11 @@ def main(use_rl=False, model_path=None):
     running = True
     show_fps = False
     
-    # Precompute some values
-    half_width = WIDTH // 2
+    # Get level configuration if level_id is provided
+    if level_id is not None:
+        from game.config.level_config import get_level_config
+        level_config = get_level_config(level_id)
+        table.table_color = level_config["theme"]["table_color"]
     
     while running:
         frame_start = time.time()
@@ -417,68 +395,32 @@ def main(use_rl=False, model_path=None):
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_f:
-                    show_fps = not show_fps
-                elif event.key == pygame.K_r and not game_over:  # Only allow reset when not in game over
-                    # Complete reset
-                    puck.reset(zero_velocity=True)
-                    
-                    # Reset mallet positions
-                    human_mallet.position = [WIDTH // 4, HEIGHT // 2]
-                    human_mallet.rect.center = human_mallet.position
-                    ai_mallet.position = [WIDTH * 3 // 4, HEIGHT // 2]
-                    ai_mallet.rect.center = ai_mallet.position
-                    
-                    # Reset velocities
-                    human_mallet.velocity = [0, 0]
-                    ai_mallet.velocity = [0, 0]
-                    
-                    # Show reset message
-                    show_reset_message = True
-                    reset_message_timer = pygame.time.get_ticks()
-                if event.key == pygame.K_ESCAPE:  # Tecla ESC para pausar
-                    if not waiting_for_resume_click:  # Solo pausar si no estamos esperando confirmación
-                        resume_target_pos = (human_mallet.position[0], human_mallet.position[1])
-                        paused = True
-                        waiting_for_resume_click = False
-                elif event.key == pygame.K_m:  # Allow model switch at any time
-                    # Switch model type (if multiple available)
-                    if use_rl:
-                        print("Switching to next available model...")
-                        # Find next model
-                        current_improved = model_type == "improved"
-                        if current_improved:
-                            # Try Fixed models
-                            for path in ["improved_models/fixed_air_hockey_final.zip", "improved_models/quick_fixed_model_final.zip"]:
-                                if os.path.exists(path):
-                                    try:
-                                        model, model_type = load_optimized_model(path, "enhanced")
-                                        print(f"Switched to: {path}")
-                                        break
-                                    except:
-                                        continue
-                        else:
-                            # Try improved models
-                            for path in ["improved_models/improved_air_hockey_final.zip", "improved_models/quick_model_final.zip"]:
-                                if os.path.exists(path):
-                                    try:
-                                        model, model_type = load_optimized_model(path, "improved")
-                                        print(f"Switched to: {path}")
-                                        break
-                                    except:
-                                        continue
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                mouse_clicked = True
-                        
+                if debug_mode:
+                    if event.key == pygame.K_f:
+                        show_fps = not show_fps
+                    elif event.key == pygame.K_r and not game_over:
+                        # Complete reset
+                        puck.reset(zero_velocity=True)
+                        human_mallet.position = [WIDTH // 4, HEIGHT // 2]
+                        human_mallet.rect.center = human_mallet.position
+                        ai_mallet.position = [WIDTH * 3 // 4, HEIGHT // 2]
+                        ai_mallet.rect.center = ai_mallet.position
+                        human_mallet.velocity = [0, 0]
+                        ai_mallet.velocity = [0, 0]
+                        show_reset_message = True
+                        reset_message_timer = pygame.time.get_ticks()
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+
         # Only update game state if not in game over
-        if not game_over and not paused and not waiting_for_resume_click:
+        if not game_over:
             # Update human mallet with the mouse position we got earlier
             human_mallet.update(mouse_pos)
             
             # AI mallet control logic - with frame skipping
             frame_count = (frame_count + 1) % frame_skip
             
-            if use_rl and model is not None and frame_count == 0:
+            if model is not None and frame_count == 0:
                 current_time = pygame.time.get_ticks()
                 
                 # Make predictions at specified intervals
@@ -603,14 +545,14 @@ def main(use_rl=False, model_path=None):
                 
                 # Apply the action with fixed step size
                 prev_position = ai_mallet.position.copy()
-                move_amount = 7
+                move_amount = 9  # Aumentado de 7 para movimiento más rápido
                 
                 if last_action == 0:  # Up
                     ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
                 elif last_action == 1:  # Down
                     ai_mallet.position[1] = min(ai_mallet.position[1] + move_amount, HEIGHT - ai_mallet.radius)
                 elif last_action == 2:  # Left
-                    ai_mallet.position[0] = max(ai_mallet.position[0] - move_amount, half_width + ai_mallet.radius)
+                    ai_mallet.position[0] = max(ai_mallet.position[0] - move_amount, WIDTH // 2 + ai_mallet.radius)
                 elif last_action == 3:  # Right
                     ai_mallet.position[0] = min(ai_mallet.position[0] + move_amount, WIDTH - ai_mallet.radius)
                 
@@ -623,15 +565,21 @@ def main(use_rl=False, model_path=None):
             else:
                 # Use simple AI behavior when RL is not active
                 if not use_rl:
-                    ai_mallet.update(puck.position)
+                    ai_mallet.update(puck.position, puck.velocity)
+
             
-            # Fixed physics time stepping
+            # Fixed physics time stepping - optimizado para 120 FPS
             current_time = time.time()
             elapsed = current_time - last_physics_update
             
-            if elapsed >= fixed_physics_step:
+            # Actualizar física con timestep fijo
+            accumulator = elapsed
+            while accumulator >= fixed_physics_step:
                 puck.update()
-                last_physics_update = current_time
+                accumulator -= fixed_physics_step
+            
+            if accumulator < elapsed:
+                last_physics_update = current_time - accumulator
             
             # Check collisions
             if puck.check_mallet_collision(human_mallet):
@@ -678,9 +626,11 @@ def main(use_rl=False, model_path=None):
         # Draw everything
         table.draw(screen)
         
-        # Draw glows
+        # Draw glows - optimizado para mejor rendimiento
         current_fps = clock.get_fps()
-        if not show_fps or current_fps == 0 or current_fps > 40:
+        # Solo dibujar brillos si FPS es bueno o si no estamos mostrando FPS
+        if not show_fps or current_fps > 50:
+            # Dibujar brillos completos
             draw_glow(screen, (255, 0, 0), human_mallet.position, human_mallet.radius)
             draw_glow(screen, (0, 255, 0), ai_mallet.position, ai_mallet.radius)
             draw_glow(screen, (0, 0, 255), puck.position, puck.radius)
@@ -700,80 +650,6 @@ def main(use_rl=False, model_path=None):
         font = pygame.font.Font(None, 36)
         score_text = font.render(f"{player_score} - {ai_score}", True, WHITE)
         screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 20))
-
-        if (paused or waiting_for_resume_click) and not game_over:
-            # Overlay semi-transparente
-            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 180))
-            screen.blit(overlay, (0, 0))
-            if waiting_for_resume_click:
-                confirm_font = pygame.font.Font(None, 36)
-                confirm_text = confirm_font.render("Haz click cerca de tu mazo para reanudar", True, WHITE)
-                confirm_rect = confirm_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 100))
-                screen.blit(confirm_text, confirm_rect)
-                
-                # Dibujar área objetivo
-                pygame.draw.circle(screen, (0, 255, 0, 100), resume_target_pos, resume_target_radius)
-                pygame.draw.circle(screen, (0, 255, 0), resume_target_pos, resume_target_radius, 2)
-                
-                # Dibujar línea desde mouse hasta objetivo si está fuera
-                if vector_length((mouse_pos[0]-resume_target_pos[0], mouse_pos[1]-resume_target_pos[1])) > resume_target_radius:
-                    pygame.draw.line(screen, (255, 255, 255), mouse_pos, resume_target_pos, 1)
-                
-                # Verificar click en área
-                if mouse_clicked:
-                    distance = vector_length((mouse_pos[0]-resume_target_pos[0], mouse_pos[1]-resume_target_pos[1]))
-                    if distance <= resume_target_radius:
-                        paused = False
-                        waiting_for_resume_click = False
-                        resume_target_pos = None
-            else:
-                # Texto de pausa
-                pause_font = pygame.font.Font(None, 72)
-                pause_text = pause_font.render("PAUSA", True, WHITE)
-                pause_rect = pause_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 150))
-                screen.blit(pause_text, pause_rect)
-                
-                # Botones redondos
-                button_radius = 60
-                button_y = HEIGHT // 2
-                
-                # Botón Reiniciar
-                restart_color = (100, 100, 0) if pygame.Rect(WIDTH//2 - button_radius - 150, button_y - button_radius, 
-                                                        button_radius*2, button_radius*2).collidepoint(mouse_pos) else (70, 70, 0)            
-                restart_btn = draw_round_button(screen, restart_color, (WIDTH//2 - 150, button_y), button_radius, "Reiniciar", 32)
-
-                # Botón Reanudar
-                resume_color = (0, 100, 0) if pygame.Rect(WIDTH//2 - button_radius, button_y - button_radius, 
-                                                        button_radius*2, button_radius*2).collidepoint(mouse_pos) else (0, 70, 0)
-                resume_btn = draw_round_button(screen, resume_color, (WIDTH//2, button_y), button_radius, "Reanudar", 32)
-                
-                # Botón Salir
-                quit_color = (100, 0, 0) if pygame.Rect(WIDTH//2 - button_radius + 150, button_y - button_radius, 
-                                                    button_radius*2, button_radius*2).collidepoint(mouse_pos) else (70, 0, 0)
-                quit_btn = draw_round_button(screen, quit_color, (WIDTH//2 + 150, button_y), button_radius, "Salir", 32)
-                
-                # Manejar clics en los botones
-                if pygame.mouse.get_pressed()[0]:
-                    if resume_btn.collidepoint(mouse_pos):
-                            waiting_for_resume_click = True 
-                    elif restart_btn.collidepoint(mouse_pos):
-                        # Reset game
-                        player_score = 0
-                        ai_score = 0
-                        game_over = False
-                        winner = None
-                        paused = False
-                        waiting_for_resume_click = False
-                        puck.reset(zero_velocity=True)
-                        human_mallet.position = [WIDTH // 4, HEIGHT // 2]
-                        human_mallet.rect.center = human_mallet.position
-                        ai_mallet.position = [WIDTH * 3 // 4, HEIGHT // 2]
-                        ai_mallet.rect.center = ai_mallet.position
-                        human_mallet.velocity = [0, 0]
-                        ai_mallet.velocity = [0, 0]
-                    elif quit_btn.collidepoint(mouse_pos):
-                        running = False
 
         # Draw game over screen if game is over
         if game_over:
@@ -815,18 +691,15 @@ def main(use_rl=False, model_path=None):
                 reset_message_timer = pygame.time.get_ticks()
         
         # Show model type and mode
-        if use_rl:
-            if "fixed" in str(model).lower() if model else False:
-                mode_text = font.render("Mode: Fixed RL (Full Movement Corrections)", True, WHITE)
-            elif model_type == "enhanced":
-                mode_text = font.render("Mode: Enhanced RL (Vertical & Horizontal Movement)", True, WHITE)
-            else:
-                mode_text = font.render(f"Mode: {model_type.title()} RL (Movement Corrections)", True, WHITE)
+        if "fixed" in str(model).lower() if model else False:
+            mode_text = font.render("Mode: Fixed RL (Full Movement Corrections)", True, WHITE)
+        elif model_type == "enhanced":
+            mode_text = font.render("Mode: Enhanced RL (Vertical & Horizontal Movement)", True, WHITE)
         else:
-            mode_text = font.render("Mode: Simple AI", True, WHITE)
+            mode_text = font.render(f"Mode: {model_type.title()} RL (Movement Corrections)", True, WHITE)
         screen.blit(mode_text, (WIDTH // 2 - mode_text.get_width() // 2, HEIGHT - 50))
         
-        controls_text = font.render("F: FPS | R: Reset | M: Switch Model | ESC: Quit", True, WHITE)
+        controls_text = font.render("F: FPS | R: Reset | ESC: Quit", True, WHITE)
         screen.blit(controls_text, (10, HEIGHT - 30))
         
         # Show reset message if active
@@ -850,7 +723,7 @@ def main(use_rl=False, model_path=None):
             screen.blit(vel_text, (10, 40))
             
             # Show AI info if using RL
-            if use_rl and model:
+            if model:
                 action_names = ["Up", "Down", "Left", "Right", "Stay"]
                 action_text = font.render(f"AI Action: {action_names[last_action]}", True, WHITE)
                 screen.blit(action_text, (10, 70))
@@ -1093,6 +966,17 @@ def start_game_with_level(level_id, save_system=None, screen=None):
         if own_screen:
             pygame.quit()
 
+def draw_round_button(screen, color, center, radius, text, font_size=36):
+    """Dibuja un botón circular con texto centrado"""
+    pygame.draw.circle(screen, color, center, radius)
+    pygame.draw.circle(screen, WHITE, center, radius, 2)  # Borde blanco
+    
+    font = pygame.font.Font(None, font_size)
+    text_surface = font.render(text, True, WHITE)
+    text_rect = text_surface.get_rect(center=center)
+    screen.blit(text_surface, text_rect)
+    return pygame.Rect(center[0]-radius, center[1]-radius, radius*2, radius*2)
+
 def main_with_config(use_rl=False, model_path=None, screen=None, level_config=None, save_system=None):
     """
     Versión modificada de main() que acepta configuración externa
@@ -1169,26 +1053,26 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
-    prediction_interval = 20  # ms between predictions
+    prediction_interval = 15  # ms between predictions (reducido de 20 para más responsividad)
     
     # Behavioral correction system
-    force_vertical_threshold = 80
-    vertical_move_cooldown = 15
-    last_vertical_move = 100
-    force_horizontal_threshold = 120
-    horizontal_move_cooldown = 15
-    last_horizontal_move = 100
-    movement_history = []
-    stuck_in_bottom_counter = 0
-    stuck_in_side_counter = 0
+    force_vertical_threshold = 80  # Force vertical movement if puck is this far vertically
+    vertical_move_cooldown = 15  # Frames between forced vertical moves
+    last_vertical_move = 100  # Time since last vertical move
+    force_horizontal_threshold = 120  # Force horizontal movement if puck is this far horizontally
+    horizontal_move_cooldown = 15  # Frames between forced horizontal moves
+    last_horizontal_move = 100  # Time since last horizontal move
+    movement_history = []  # Track recent actions
+    stuck_in_bottom_counter = 0  # Counter for being stuck in bottom
+    stuck_in_side_counter = 0  # Counter for being stuck in side
     
     # Frame skip for AI updates
     frame_count = 0
-    frame_skip = 2
+    frame_skip = 1  # Reducido de 2 para actualizaciones más frecuentes
     
     # Physics time step control
     last_physics_update = time.time()
-    fixed_physics_step = 1/120
+    fixed_physics_step = 1/120  # Ajustado para 120 FPS
     
     # For reset message
     show_reset_message = False
@@ -1356,7 +1240,7 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                 
                 # Apply the action with fixed step size
                 prev_position = ai_mallet.position.copy()
-                move_amount = 7
+                move_amount = 9  # Aumentado de 7 para movimiento más rápido
                 
                 if last_action == 0:  # Up
                     ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
@@ -1376,15 +1260,20 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
             else:
                 # Use simple AI behavior when RL is not active
                 if not use_rl:
-                    ai_mallet.update(puck.position)
+                    ai_mallet.update(puck.position, puck.velocity)
             
-            # Fixed physics time stepping
+            # Fixed physics time stepping - optimizado para 120 FPS
             current_time = time.time()
             elapsed = current_time - last_physics_update
             
-            if elapsed >= fixed_physics_step:
+            # Actualizar física con timestep fijo
+            accumulator = elapsed
+            while accumulator >= fixed_physics_step:
                 puck.update()
-                last_physics_update = current_time
+                accumulator -= fixed_physics_step
+            
+            if accumulator < elapsed:
+                last_physics_update = current_time - accumulator
             
             # Check collisions
             if puck.check_mallet_collision(human_mallet):
@@ -1431,9 +1320,11 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
         # Draw everything
         table.draw(screen)
         
-        # Draw glows
+        # Draw glows - optimizado para mejor rendimiento
         current_fps = clock.get_fps()
-        if not show_fps or current_fps == 0 or current_fps > 40:
+        # Solo dibujar brillos si FPS es bueno o si no estamos mostrando FPS
+        if not show_fps or current_fps > 50:
+            # Dibujar brillos completos
             draw_glow(screen, (255, 0, 0), human_mallet.position, human_mallet.radius)
             draw_glow(screen, (0, 255, 0), ai_mallet.position, ai_mallet.radius)
             draw_glow(screen, (0, 0, 255), puck.position, puck.radius)

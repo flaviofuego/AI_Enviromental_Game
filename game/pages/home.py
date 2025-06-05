@@ -8,6 +8,8 @@ import time
 
 from ..config.save_system import GameSaveSystem
 from ..components.Button import Button
+from ..components.PopUp import PopUp, create_help_popup, create_settings_popup
+from ..components.AudioManager import audio_manager
 
 class HockeyMainScreen:
     def __init__(self, screen=None, save_system=None):
@@ -60,7 +62,8 @@ class HockeyMainScreen:
             'text_gold': (255, 215, 0),
             'panel_dark': (20, 20, 40, 200),
             'button_active': (0, 100, 200),
-            'button_hover': (0, 150, 255)
+            'button_hover': (0, 150, 255),
+            'purple': (128, 0, 128),
         }
         
         # Fuentes
@@ -97,6 +100,21 @@ class HockeyMainScreen:
             {'name': 'DEFORESTIX', 'desc': 'Talador de raíces\nDevora los pulmones del planeta', 'unlocked': False, 'defeated': False},
             {'name': 'HEATCORE', 'desc': 'Maestro del calor\nConvierte ciudades en hornos', 'unlocked': False, 'defeated': False}
         ]
+
+         # Definir las skins disponibles
+        self.available_skins = [
+            {'id': 'default', 'name': 'Predeterminado', 'color': (200, 200, 200)},
+            {'id': 'eco_warrior', 'name': 'Guerrero Eco', 'color': (100, 200, 100)},
+            {'id': 'arctic', 'name': 'Explorador Ártico', 'color': (150, 220, 255)},
+            {'id': 'volcano', 'name': 'Resistente Volcánico', 'color': (255, 100, 50)},
+            {'id': 'cyber', 'name': 'Hacker Climático', 'color': (100, 255, 200)},
+            {'id': 'retro', 'name': 'Retro Salvador', 'color': (255, 200, 100)},
+            {'id': 'scientist', 'name': 'Científico', 'color': (200, 200, 255)},
+            {'id': 'agent', 'name': 'Agente Especial', 'color': (50, 50, 100)},
+        ]
+        
+        # Inicializar la skin seleccionada por defecto
+        self.selected_skin_id = "default"
         
         # Botones circulares
         center_x = self.screen_width // 2
@@ -139,10 +157,16 @@ class HockeyMainScreen:
         # Paneles
         self.show_gaia_panel = False
         self.show_progress_panel = True
+        self.help_popup = None
+        self.settings_popup = None  # Añadir variable para el popup de configuración
         
         # Cargar perfiles al iniciar
         self.load_profiles()
-        
+        if self.save_system.current_profile:
+            if "skin" in self.save_system.current_profile:
+                self.selected_skin_id = self.save_system.current_profile["skin"]
+            audio_manager.load_audio_settings_from_profile(self.save_system)
+
         self.clock = pygame.time.Clock()
     
     def load_profiles(self):
@@ -175,12 +199,20 @@ class HockeyMainScreen:
                     'current_level': profile["levels"]["current"]
                 }
                 
+                # Cargar la skin seleccionada si existe
+                if "skin" in profile:
+                    self.selected_skin_id = profile["skin"]
+                else:
+                    self.selected_skin_id = "default"
+                
                 # Actualizar estado de enemigos
                 for enemy in self.enemy_agents:
                     enemy["defeated"] = enemy["name"] in profile["enemies_defeated"]
                     # Desbloquear enemigos según nivel
                     if self.game_data['levels_unlocked'] >= self.enemy_agents.index(enemy) + 1:
                         enemy["unlocked"] = True
+
+                audio_manager.load_audio_settings_from_profile(self.save_system)
                 
                 self.success_message = f"¡Bienvenido de vuelta, {profile['player_name']}!"
                 self.message_time = time.time()
@@ -213,6 +245,14 @@ class HockeyMainScreen:
                 'levels_unlocked': 1,
                 'current_level': 1
             }
+
+            # Establecer skin por defecto
+            profile["skin"] = "default"
+            self.selected_skin_id = "default"
+            self.save_system.save_current_profile()
+
+             # Guardar la configuración de audio actual en el perfil
+            audio_manager.save_audio_settings_to_profile(self.save_system)
             
             # Restablecer estado de enemigos
             for enemy in self.enemy_agents:
@@ -431,7 +471,7 @@ class HockeyMainScreen:
         """Dibujar fondo animado con efectos ambientales"""
         
         # Dibujar el gradiente base
-        self.draw_gradient_background()
+        #self.draw_gradient_background()
         
         # Dibujar la imagen de fondo con transparencia
         if self.background_image:
@@ -576,17 +616,6 @@ class HockeyMainScreen:
                 self.screen.blit(sparkle_surface, 
                                (sparkle['x'] - sparkle['size'] * 2, sparkle['y'] - sparkle['size'] * 2))
 
-    def draw_gradient_background(self):
-        """Dibujar fondo con gradiente dramático"""
-        for y in range(self.screen_height):
-            ratio = y / self.screen_height
-            color = [
-                int(self.colors['bg_gradient_top'][i] * (1 - ratio) + 
-                    self.colors['bg_gradient_bottom'][i] * ratio)
-                for i in range(3)
-            ]
-            pygame.draw.line(self.screen, color, (0, y), (self.screen_width, y))
-    
     def draw_particles(self):
         """Dibujar y animar partículas atmosféricas"""
         for particle in self.particles:
@@ -837,7 +866,6 @@ class HockeyMainScreen:
     def handle_click(self, pos):
         """Manejar clics en botones del menú principal"""
         for button_key, button in self.buttons.items():
-            distance = math.sqrt((pos[0] - button['pos'][0])**2 + (pos[1] - button['pos'][1])**2)
             if button['object'].is_clicked(pos):
                 if button_key == 'play':
                     print("Iniciando selección de niveles...")
@@ -858,9 +886,14 @@ class HockeyMainScreen:
                     return None
                 elif button_key == 'settings':
                     print("Abriendo configuración...")
-                    return 'settings'
+                    # Crear popup de configuración
+                    self.settings_popup = create_settings_popup(self.screen, audio_manager)
+                    self.settings_popup.show()
+                    return None
                 elif button_key == 'help':
                     print("Abriendo ayuda...")
+                    self.help_popup = create_help_popup(self.screen, "home")
+                    self.help_popup.show()
                     return 'help'
                 elif button_key == 'background':
                     # Cambiar la opacidad del fondo al hacer clic
@@ -870,7 +903,7 @@ class HockeyMainScreen:
         return None
 
     def draw_profiles_screen(self):
-        """Dibujar pantalla de perfiles"""
+        """Dibujar pantalla de perfiles con botones más pequeños"""
         # Dibujar fondo
         self.draw_animated_background()
         
@@ -901,7 +934,10 @@ class HockeyMainScreen:
         ui_elements = {
             'profiles': [],
             'create_button': None,
-            'back_button': None
+            'back_button': None,
+            'skin_button': None,
+            'load_button': None,
+            'delete_button': None
         }
         
         # Mostrar perfiles existentes
@@ -939,38 +975,49 @@ class HockeyMainScreen:
                 'index': i
             })
         
-        # Botones de acción
-        button_y = panel_y + panel_height - 70
+        # Botones de acción - Tamaños reducidos
+        button_width = 100  # Ancho reducido
+        button_height = 30  # Alto reducido
+        button_y = panel_y + panel_height - 60  # Posición ajustada
+        button_spacing = 10  # Espaciado entre botones
         
-        # Botón Crear Nuevo Perfil
-        create_button = pygame.Rect(panel_x + 20, button_y, 150, 40)
-        pygame.draw.rect(self.screen, self.colors['hope_green'], create_button, border_radius=5)
-        create_text = self.font_text.render("Nuevo Perfil", True, self.colors['text_white'])
+        # Botón Nuevo Perfil (más pequeño)
+        create_button = pygame.Rect(panel_x + 20, button_y, button_width, button_height)
+        pygame.draw.rect(self.screen, self.colors['hope_green'], create_button, border_radius=3)
+        create_text = self.font_small.render("Nuevo", True, self.colors['text_white'])  # Texto más corto
         create_text_rect = create_text.get_rect(center=create_button.center)
         self.screen.blit(create_text, create_text_rect)
         ui_elements['create_button'] = create_button
         
-        # Botón Cargar
+        # Botón Cargar (solo si hay perfil seleccionado)
         if self.selected_profile_index >= 0:
-            load_button = pygame.Rect(panel_x + 190, button_y, 100, 40)
-            pygame.draw.rect(self.screen, self.colors['button_active'], load_button, border_radius=5)
-            load_text = self.font_text.render("Cargar", True, self.colors['text_white'])
+            load_button = pygame.Rect(create_button.right + button_spacing, button_y, button_width, button_height)
+            pygame.draw.rect(self.screen, self.colors['button_active'], load_button, border_radius=3)
+            load_text = self.font_small.render("Cargar", True, self.colors['text_white'])
             load_text_rect = load_text.get_rect(center=load_button.center)
             self.screen.blit(load_text, load_text_rect)
             ui_elements['load_button'] = load_button
             
-            # Botón Eliminar
-            delete_button = pygame.Rect(panel_x + 310, button_y, 100, 40)
-            pygame.draw.rect(self.screen, self.colors['critical_red'], delete_button, border_radius=5)
-            delete_text = self.font_text.render("Eliminar", True, self.colors['text_white'])
+            # Botón Eliminar (texto abreviado a "Elim")
+            delete_button = pygame.Rect(load_button.right + button_spacing, button_y, button_width, button_height)
+            pygame.draw.rect(self.screen, self.colors['critical_red'], delete_button, border_radius=3)
+            delete_text = self.font_small.render("Elim", True, self.colors['text_white'])
             delete_text_rect = delete_text.get_rect(center=delete_button.center)
             self.screen.blit(delete_text, delete_text_rect)
             ui_elements['delete_button'] = delete_button
+            
+            # Botón Skin (nuevo botón)
+            skin_button = pygame.Rect(delete_button.right + button_spacing, button_y, button_width, button_height)
+            pygame.draw.rect(self.screen, self.colors['purple'], skin_button, border_radius=3)
+            skin_text = self.font_small.render("Skin", True, self.colors['text_white'])
+            skin_text_rect = skin_text.get_rect(center=skin_button.center)
+            self.screen.blit(skin_text, skin_text_rect)
+            ui_elements['skin_button'] = skin_button
         
-        # Botón Volver
-        back_button = pygame.Rect(panel_x + panel_width - 120, button_y, 100, 40)
-        pygame.draw.rect(self.screen, self.colors['warning_orange'], back_button, border_radius=5)
-        back_text = self.font_text.render("Volver", True, self.colors['text_white'])
+        # Botón Volver (ajustado a nuevo tamaño)
+        back_button = pygame.Rect(panel_x + panel_width - button_width - 20, button_y, button_width, button_height)
+        pygame.draw.rect(self.screen, self.colors['warning_orange'], back_button, border_radius=3)
+        back_text = self.font_small.render("Volver", True, self.colors['text_white'])
         back_text_rect = back_text.get_rect(center=back_button.center)
         self.screen.blit(back_text, back_text_rect)
         ui_elements['back_button'] = back_button
@@ -1077,10 +1124,192 @@ class HockeyMainScreen:
                 
                 elif 'delete_button' in ui_elements and ui_elements['delete_button'].collidepoint(event.pos):
                     self.delete_selected_profile()
+                
+                elif 'skin_button' in ui_elements and ui_elements['skin_button'].collidepoint(event.pos):
+                    self.current_screen = "skin_selection"  # Nueva pantalla para selección de skins
         
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.current_screen = "main"
+
+    def draw_skin_selection_screen(self):
+        """Dibujar pantalla de selección de skins con vista previa interactiva"""
+        # Dibujar fondo
+        self.draw_animated_background()
+        
+        # Panel principal
+        panel_width = 700 if not self.is_mobile else self.screen_width - 40
+        panel_height = 550 if not self.is_mobile else self.screen_height - 100
+        panel_x = (self.screen_width - panel_width) // 2
+        panel_y = (self.screen_height - panel_height) // 2
+        
+        # Fondo del panel con transparencia
+        panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        panel_surface.fill((20, 20, 40, 220))  # Fondo más oscuro para mejor contraste
+        self.screen.blit(panel_surface, (panel_x, panel_y))
+        
+        # Borde del panel con efecto neón
+        pygame.draw.rect(self.screen, self.colors['purple'], 
+                        (panel_x, panel_y, panel_width, panel_height), 3, border_radius=10)
+        
+        # Título con efecto especial
+        title = self.font_title.render("SELECCIONAR SKIN", True, self.colors['ice_blue'])
+        title_shadow = self.font_title.render("SELECCIONAR SKIN", True, (100, 100, 255, 150))
+        title_rect = title.get_rect(center=(self.screen_width // 2, panel_y + 50))
+        self.screen.blit(title_shadow, (title_rect.x + 3, title_rect.y + 3))
+        self.screen.blit(title, title_rect)
+        
+        # Mostrar nombre del perfil actual
+        if 0 <= self.selected_profile_index < len(self.profiles):
+            profile_name = self.profiles[self.selected_profile_index]['player_name']
+            subtitle = self.font_subtitle.render(f"Perfil: {profile_name}", True, self.colors['text_white'])
+            subtitle_rect = subtitle.get_rect(center=(self.screen_width // 2, panel_y + 90))
+            self.screen.blit(subtitle, subtitle_rect)
+        
+        current_skin_id = getattr(self, 'selected_skin_id', 'default')
+        if 0 <= self.selected_profile_index < len(self.profiles):
+            current_skin_id = self.profiles[self.selected_profile_index].get('skin', current_skin_id)
+        
+        # Área de vista previa (derecha)
+        preview_width = 250
+        preview_x = panel_x + panel_width - preview_width - 30
+        preview_y = panel_y + 140
+        preview_height = panel_height - 200
+        
+        # Fondo de vista previa
+        pygame.draw.rect(self.screen, (30, 30, 60), (preview_x, preview_y, preview_width, preview_height), border_radius=15)
+        pygame.draw.rect(self.screen, self.colors['ice_blue'], (preview_x, preview_y, preview_width, preview_height), 2, border_radius=15)
+        
+        # Título "Vista Previa"
+        preview_title = self.font_subtitle.render("VISTA PREVIA", True, self.colors['text_white'])
+        self.screen.blit(preview_title, (preview_x + preview_width//2 - preview_title.get_width()//2, preview_y + 20))
+        
+        # Dibujar skin seleccionada en vista previa (con la forma específica)
+        preview_radius = 80
+        preview_center_x = preview_x + preview_width // 2
+        preview_center_y = preview_y + preview_height // 2
+        
+        # Crear superficie para la skin
+        skin_surface = pygame.Surface((preview_radius * 2, preview_radius * 2), pygame.SRCALPHA)
+        skin_color = next((sk['color'] for sk in self.available_skins if sk['id'] == current_skin_id), (200, 200, 200))
+        
+        # Dibujar círculo principal
+        pygame.draw.circle(skin_surface, skin_color, (preview_radius, preview_radius), preview_radius)
+        
+        # Añadir brillo al centro exactamente como lo especificaste
+        pygame.draw.circle(skin_surface, (255, 255, 255, 150), (preview_radius, preview_radius), preview_radius // 2)
+        
+        # Dibujar en pantalla
+        self.screen.blit(skin_surface, (preview_center_x - preview_radius, preview_center_y - preview_radius))
+        
+        # Nombre de la skin actual
+        skin_name = next((sk['name'] for sk in self.available_skins if sk['id'] == current_skin_id), "Predeterminado")
+        selected_text = self.font_text.render(f"Skin actual: {skin_name}", True, self.colors['text_gold'])
+        self.screen.blit(selected_text, (preview_center_x - selected_text.get_width()//2, preview_center_y + preview_radius + 20))
+
+        # Lista de skins (izquierda)
+        skins_y_start = panel_y + 140
+        skin_size = 70
+        skins_per_row = 3
+        padding = 25
+        max_skins = 8
+        
+        ui_elements = {
+            'skins': [],
+            'back_button': None
+        }
+        
+        # Organizar skins en 2 columnas
+        for i, skin in enumerate(self.available_skins[:max_skins]):
+            row = i // skins_per_row
+            col = i % skins_per_row
+            
+            x_pos = panel_x + padding + col * (skin_size + padding + 40)
+            y_pos = skins_y_start + row * (skin_size + padding + 10)
+            
+            skin_rect = pygame.Rect(x_pos, y_pos, skin_size, skin_size)
+            
+            # Fondo del ícono de skin
+            pygame.draw.circle(self.screen, (40, 40, 70), (x_pos + skin_size//2, y_pos + skin_size//2), skin_size//2 + 5)
+            
+            # Ícono de skin
+            pygame.draw.circle(self.screen, skin['color'], (x_pos + skin_size//2, y_pos + skin_size//2), skin_size//2 - 3)
+            
+            # Resaltar selección actual
+            if skin['id'] == current_skin_id:
+                pygame.draw.circle(self.screen, self.colors['text_gold'], 
+                                (x_pos + skin_size//2, y_pos + skin_size//2), 
+                                skin_size//2 + 2, 3)
+                # Efecto de selección
+                glow_surface = pygame.Surface((skin_size+10, skin_size+10), pygame.SRCALPHA)
+                pygame.draw.circle(glow_surface, (*self.colors['text_gold'], 80), 
+                                (skin_size//2 + 5, skin_size//2 + 5), skin_size//2 + 5)
+                self.screen.blit(glow_surface, (x_pos - 5, y_pos - 5))
+            
+            # Nombre de la skin
+            name_text = self.font_small.render(skin['name'], True, self.colors['text_white'])
+            name_rect = name_text.get_rect(center=(x_pos + skin_size//2, y_pos + skin_size + 15))
+            self.screen.blit(name_text, name_rect)
+            
+            ui_elements['skins'].append({
+                'rect': skin_rect,
+                'skin_id': skin['id']
+            })
+        
+        # Botón Volver con mejor diseño
+        button_width = 100
+        button_height = 30
+        back_button = pygame.Rect(panel_x + panel_width - button_width - 30, 
+                                panel_y + panel_height - button_height - 20, 
+                                button_width, button_height)
+        
+        # Efecto de botón
+        pygame.draw.rect(self.screen, (80, 40, 0), back_button, border_radius=5)
+        pygame.draw.rect(self.screen, self.colors['warning_orange'], back_button, border_radius=5)
+        pygame.draw.rect(self.screen, (255, 180, 50), back_button, 2, border_radius=5)
+        
+        back_text = self.font_text.render("VOLVER", True, self.colors['text_white'])
+        back_text_rect = back_text.get_rect(center=back_button.center)
+        self.screen.blit(back_text, back_text_rect)
+        ui_elements['back_button'] = back_button
+        
+        # Mostrar mensajes
+        self.draw_messages()
+        
+        return ui_elements
+
+    def handle_skin_selection_events(self, event, ui_elements):
+        """Manejar eventos en la pantalla de selección de skins"""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Verificar clic en skins
+            for skin_data in ui_elements['skins']:
+                if skin_data['rect'].collidepoint(event.pos):
+                    self.selected_skin_id = skin_data['skin_id']
+                    
+                    # Guardar la skin seleccionada en el perfil actual
+                    if 0 <= self.selected_profile_index < len(self.profiles):
+                        profile_id = self.profiles[self.selected_profile_index]["profile_id"]
+                        profile = self.save_system.load_profile(profile_id)
+                        
+                        if profile:
+                            profile["skin"] = self.selected_skin_id
+                            self.save_system.current_profile = profile
+                            self.save_system.save_current_profile()
+                            
+                            # Mostrar mensaje de confirmación
+                            self.success_message = f"¡Skin {skin_data['skin_id']} guardada!"
+                            self.message_time = time.time()
+                    
+                    # Actualizar vista previa inmediatamente
+                    return self.draw_skin_selection_screen()
+            
+            # Verificar botón volver
+            if ui_elements['back_button'].collidepoint(event.pos):           
+                self.current_screen = "profiles"
+        
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.current_screen = "profiles"
 
     def handle_create_profile_events(self, event, ui_elements):
         """Manejar eventos en la pantalla de creación de perfil"""
@@ -1146,6 +1375,29 @@ class HockeyMainScreen:
             
             self.screen.blit(success_surface, success_rect)
 
+    def draw_active_profile(self):
+        """Dibujar el perfil activo en la esquina inferior izquierda"""
+        if self.save_system.current_profile:
+            profile_name = self.save_system.current_profile["player_name"]
+            profile_text = f"Agente: {profile_name}"
+            
+            # Crear superficie para el fondo del mensaje
+            profile_surface = self.font_text.render(profile_text, True, self.colors['text_gold'])
+            profile_rect = profile_surface.get_rect()
+            profile_rect.bottomleft = (20, self.screen_height - 20)
+            
+            # Dibujar fondo semi-transparente
+            bg_rect = profile_rect.inflate(20, 10)
+            bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
+            bg_surface.fill((20, 20, 40, 200))
+            self.screen.blit(bg_surface, bg_rect)
+            
+            # Dibujar borde
+            pygame.draw.rect(self.screen, self.colors['ice_blue'], bg_rect, 1)
+            
+            # Dibujar texto
+            self.screen.blit(profile_surface, profile_rect)
+
     def run(self):
         """Bucle principal del menú"""
         running = True
@@ -1165,11 +1417,86 @@ class HockeyMainScreen:
             # Actualizar efectos ambientales
             self.update_environmental_effects(dt)
             
+            # Actualizar popups si existen
+            if self.help_popup:
+                popup_result = self.help_popup.update(dt)
+                if popup_result == "closed":
+                    self.help_popup = None
+                    
+            if self.settings_popup:
+                popup_result = self.settings_popup.update(dt)
+                if popup_result == "closed":
+                    self.settings_popup = None
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                     result = "exit"  # Añadido para señalar salida del juego
                 
+                # Manejar eventos del popup si está visible
+                if self.help_popup and self.help_popup.is_visible():
+                    popup_action = self.help_popup.handle_event(event)
+                    if popup_action == "more_info":
+                        # Aquí podrías implementar alguna acción adicional
+                        pass
+                    continue  # Si el popup está visible, no procesar otros eventos
+                
+                # Manejar eventos del popup de configuración si está visible
+                if self.settings_popup and self.settings_popup.is_visible():
+                    popup_action = self.settings_popup.handle_event(event)
+                    if popup_action:
+                        if popup_action == "toggle_music":
+                            # Alternar el estado de la música
+                            audio_manager.toggle_music()
+                            audio_manager.save_audio_settings_to_profile(self.save_system)
+                            # Recrear el popup para actualizar el texto del botón
+                            self.settings_popup = create_settings_popup(self.screen, audio_manager)
+                            self.settings_popup.show()
+                        elif popup_action == "toggle_sfx":
+                            # Alternar el estado de los efectos de sonido
+                            audio_manager.toggle_sfx()
+                            audio_manager.save_audio_settings_to_profile(self.save_system)
+                            # Recrear el popup para actualizar el texto del botón
+                            self.settings_popup = create_settings_popup(self.screen, audio_manager)
+                            self.settings_popup.show()
+                        elif popup_action == "save_settings":
+                            # Guardar los cambios de configuración
+                            music_volume = 0.5
+                            sfx_volume = 0.5
+                            
+                            # Obtener los valores actuales de los sliders
+                            for element in self.settings_popup.interactive_elements:
+                                if element["id"] == "music_volume":
+                                    music_volume = element["value"]
+                                elif element["id"] == "sfx_volume":
+                                    sfx_volume = element["value"]
+                            
+                            # Aplicar y guardar cambios
+                            audio_manager.set_music_volume(music_volume)
+                            audio_manager.set_sfx_volume(sfx_volume)
+                            #audio_manager.save_audio_settings()
+                            audio_manager.save_audio_settings_to_profile(self.save_system)
+                            self.settings_popup.close()
+                        elif popup_action == "cancel":
+                            # Descartar cambios y cerrar
+                            audio_manager.load_audio_settings_from_profile(self.save_system)
+                            #audio_manager.load_audio_settings()  # Restaurar configuración guardada
+                            self.settings_popup.close()
+                        elif isinstance(popup_action, dict) and popup_action.get("action") == "slider_change":
+                            # Actualizar el volumen en tiempo real mientras se arrastra el slider
+                            slider_id = popup_action.get("id")
+                            value = popup_action.get("value")
+                            
+                            if slider_id == "music_volume":
+                                audio_manager.set_music_volume(value)
+                            elif slider_id == "sfx_volume":
+                                audio_manager.set_sfx_volume(value)
+                                # Reproducir un sonido para probar el volumen de efectos
+                                if int(time.time() * 2) % 2 == 0:
+                                    audio_manager.play_sound_effect("button_hover")
+                    continue  # Si el popup está visible, no procesar otros eventos
+
+
                 # Manejo de eventos según la pantalla actual
                 if self.current_screen == "main":
                     if event.type == pygame.MOUSEBUTTONDOWN:
@@ -1213,37 +1540,27 @@ class HockeyMainScreen:
                 self.draw_gaia_panel()
                 self.draw_progress_panel()
                 self.draw_climate_warning()
-                
-                # Mostrar mensaje del perfil activo en la esquina inferior izquierda
-                if self.save_system.current_profile:
-                    profile_name = self.save_system.current_profile["player_name"]
-                    profile_text = f"Agente: {profile_name}"
-                    
-                    # Crear superficie para el fondo del mensaje
-                    profile_surface = self.font_text.render(profile_text, True, self.colors['text_gold'])
-                    profile_rect = profile_surface.get_rect()
-                    profile_rect.bottomleft = (20, self.screen_height - 20)
-                    
-                    # Dibujar fondo semi-transparente
-                    bg_rect = profile_rect.inflate(20, 10)
-                    bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
-                    bg_surface.fill((20, 20, 40, 200))
-                    self.screen.blit(bg_surface, bg_rect)
-                    
-                    # Dibujar borde
-                    pygame.draw.rect(self.screen, self.colors['ice_blue'], bg_rect, 1)
-                    
-                    # Dibujar texto
-                    self.screen.blit(profile_surface, profile_rect)
+                self.draw_active_profile()
+
+                # Dibujar popup de ayuda si está visible
+                if self.help_popup:
+                    self.help_popup.draw()
                 
             elif self.current_screen == "profiles":
                 self.draw_profiles_screen()
                 
             elif self.current_screen == "create_profile":
                 self.draw_create_profile_screen()
+
+            elif self.current_screen == "skin_selection":
+                ui_elements = self.draw_skin_selection_screen()
+                self.handle_skin_selection_events(event, ui_elements)
             
-            # Mostrar mensajes generales
-            
+            # Mostrar mensajes generales   
+            self.draw_messages()
+
+            if self.settings_popup:
+                self.settings_popup.draw()            
             
             pygame.display.flip()
         

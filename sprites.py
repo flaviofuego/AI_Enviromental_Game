@@ -61,14 +61,20 @@ class AIMallet(Mallet):
     def __init__(self):
         current_width, current_height = get_screen_dimensions()
         super().__init__(current_width * 3 // 4, current_height // 2, NEON_GREEN)
+        self.reaction_speed = 0.12  # Velocidad de reacción aumentada (era 0.1)
+        self.prediction_factor = 0.5  # Factor de predicción de trayectoria
         
-    def update(self, puck_pos):
+    def update(self, puck_pos, puck_velocity=None):
         current_width, current_height = get_screen_dimensions()
         self.prev_position = self.position.copy()
         
-        # Movimiento simple de seguimiento, se reemplazará con RL
+        # Movimiento mejorado con predicción
         if puck_pos:
-            if puck_pos[0] > current_width // 2:  # Solo si la bola está en su mitad
+            # Solo reaccionar si el puck está en su mitad o acercándose
+            puck_in_ai_half = puck_pos[0] > current_width // 2
+            puck_approaching = puck_velocity and puck_velocity[0] > 0 if puck_velocity else False
+            
+            if puck_in_ai_half or puck_approaching:
                 # Detectar si el puck está cerca de una esquina
                 is_near_corner = (
                     (puck_pos[0] < self.radius*3 or puck_pos[0] > current_width - self.radius*3) and 
@@ -76,31 +82,71 @@ class AIMallet(Mallet):
                 )
                 
                 if is_near_corner:
-                    # Estrategia de esquina: moverse hacia el centro en lugar de hacia el puck
-                    # Calcular vector desde la esquina hacia el centro de la mesa
-                    target_x = current_width * 3 // 4  # Punto central de la mitad derecha
+                    # Estrategia de esquina: moverse hacia el centro
+                    target_x = current_width * 3 // 4
                     target_y = current_height // 2
                     
-                    # Moverse hacia ese punto con suavidad
-                    self.position[0] += (target_x - self.position[0]) * 0.15
-                    self.position[1] += (target_y - self.position[1]) * 0.15
+                    # Moverse más rápido cuando está en esquina
+                    self.position[0] += (target_x - self.position[0]) * self.reaction_speed * 1.5
+                    self.position[1] += (target_y - self.position[1]) * self.reaction_speed * 1.5
                 else:
-                    # Comportamiento normal con algo de inteligencia añadida
-                    # Intentar interceptar el puck basado en su trayectoria, no solo su posición
-                    # Calcular punto de interceptación estimado
-                    intercept_x = min(max(puck_pos[0] + random.randint(-20, 20), current_width // 2 + self.radius), current_width - self.radius)
-                    intercept_y = min(max(puck_pos[1] + random.randint(-20, 20), self.radius), current_height - self.radius)
+                    # Predicción de trayectoria mejorada
+                    target_x = puck_pos[0]
+                    target_y = puck_pos[1]
                     
-                    # Mover hacia el punto de interceptación con suavidad
-                    self.position[0] += (intercept_x - self.position[0]) * 0.1
-                    self.position[1] += (intercept_y - self.position[1]) * 0.1
+                    # Si tenemos velocidad del puck, predecir dónde estará
+                    if puck_velocity:
+                        # Calcular tiempo estimado para interceptar
+                        distance_to_puck = math.sqrt((puck_pos[0] - self.position[0])**2 + 
+                                                   (puck_pos[1] - self.position[1])**2)
+                        time_to_intercept = distance_to_puck / (self.reaction_speed * 100)
+                        
+                        # Predecir posición futura
+                        predicted_x = puck_pos[0] + puck_velocity[0] * time_to_intercept * self.prediction_factor
+                        predicted_y = puck_pos[1] + puck_velocity[1] * time_to_intercept * self.prediction_factor
+                        
+                        # Limitar predicción a los límites del campo
+                        target_x = min(max(predicted_x, current_width // 2 + self.radius), 
+                                     current_width - self.radius)
+                        target_y = min(max(predicted_y, self.radius), 
+                                     current_height - self.radius)
+                    
+                    # Añadir algo de aleatoriedad para hacer la IA menos perfecta
+                    target_x += random.randint(-15, 15)
+                    target_y += random.randint(-15, 15)
+                    
+                    # Asegurar que el target esté dentro de los límites
+                    target_x = min(max(target_x, current_width // 2 + self.radius), 
+                                 current_width - self.radius)
+                    target_y = min(max(target_y, self.radius), 
+                                 current_height - self.radius)
+                    
+                    # Mover hacia el objetivo con velocidad mejorada
+                    self.position[0] += (target_x - self.position[0]) * self.reaction_speed
+                    self.position[1] += (target_y - self.position[1]) * self.reaction_speed
+            else:
+                # Posición defensiva cuando el puck está en la otra mitad
+                defense_x = current_width * 3 // 4
+                defense_y = current_height // 2
                 
-                self.rect.center = self.position
-                  # Calcular velocidad basada en el cambio de posición
-                self.velocity = [
-                    self.position[0] - self.prev_position[0],
-                    self.position[1] - self.prev_position[1]
-                ]
+                # Ajustar posición defensiva basada en la posición del puck
+                if puck_pos[1] < current_height * 0.3:
+                    defense_y = current_height * 0.35
+                elif puck_pos[1] > current_height * 0.7:
+                    defense_y = current_height * 0.65
+                
+                # Moverse a posición defensiva más lentamente
+                self.position[0] += (defense_x - self.position[0]) * self.reaction_speed * 0.5
+                self.position[1] += (defense_y - self.position[1]) * self.reaction_speed * 0.5
+            
+            self.rect.center = self.position
+            
+            # Calcular velocidad basada en el cambio de posición
+            self.velocity = [
+                self.position[0] - self.prev_position[0],
+                self.position[1] - self.prev_position[1]
+            ]
+
 class Puck(pygame.sprite.Sprite):
     """Clase para el disco (puck)"""
     
