@@ -2,8 +2,8 @@
   "profile_id": "14eb856b-5e53-4412-a67b-046018586dd5",
   "player_name": "prueba1",
   "created_date": "2025-05-30T21:00:55.585682",
-  "last_played": "2025-06-04T22:34:13.500919",
-  "total_points": 700,
+  "last_played": "2025-06-04T22:37:54.789149",
+  "total_points": 1400,
   "planetary_progress": {
     "oceanos_limpiados": 1,
     "ozono_restaurado": 0,
@@ -28,9 +28,9 @@
     "difficulty": "normal"
   },
   "stats": {
-    "games_played": 1,
-    "wins": 1,
+    "games_played": 2,
+    "wins": 2,
     "losses": 0,
-    "time_played": 300
+    "time_played": 600
   }
 }
