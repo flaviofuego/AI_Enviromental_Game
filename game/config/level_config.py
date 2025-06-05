@@ -21,9 +21,9 @@ LEVELS = {
             }
         },
         "difficulty": 1,
-        "ai_reaction_speed": 0.08,  # IA más lenta (menor valor = más lenta)
-        "ai_prediction_factor": 0.2,  # Predicción básica
-        "ai_move_speed": 5
+        "ai_reaction_speed": 0.25 - 0.15,  # IA máxima velocidad
+        "ai_prediction_factor": 0.65 - 0.15,  # Predicción experta
+        "ai_move_speed": 20 - 10
     },
     2: {
         "name": "Forest Guardian",
@@ -43,9 +43,9 @@ LEVELS = {
             }
         },
         "difficulty": 2,
-        "ai_reaction_speed": 0.12,  # IA velocidad media
-        "ai_prediction_factor": 0.35,  # Predicción mejorada
-        "ai_move_speed": 6
+        "ai_reaction_speed": 0.25 - 0.07,  # IA máxima velocidad
+        "ai_prediction_factor": 0.65 - 0.07,  # Predicción experta
+        "ai_move_speed": 20 - 5
     },
     3: {
         "name": "Ocean Defense",
@@ -65,9 +65,9 @@ LEVELS = {
             }
         },
         "difficulty": 3,
-        "ai_reaction_speed": 0.16,  # IA más rápida
-        "ai_prediction_factor": 0.45,  # Predicción avanzada
-        "ai_move_speed": 7
+        "ai_reaction_speed": 0.25,  # IA máxima velocidad
+        "ai_prediction_factor": 0.65,  # Predicción experta
+        "ai_move_speed": 20
     },
     4: {
         "name": "City Heat Island",
@@ -87,9 +87,9 @@ LEVELS = {
             }
         },
         "difficulty": 4,
-        "ai_reaction_speed": 0.20,  # IA muy rápida
-        "ai_prediction_factor": 0.55,  # Predicción superior
-        "ai_move_speed": 8
+       "ai_reaction_speed": 0.25 + 0.15,  # IA máxima velocidad
+        "ai_prediction_factor": 0.65 + 0.15,  # Predicción experta
+        "ai_move_speed": 20 + 5
     },
     5: {
         "name": "Final Stand",
@@ -109,9 +109,9 @@ LEVELS = {
             }
         },
         "difficulty": 5,
-        "ai_reaction_speed": 0.25,  # IA máxima velocidad
-        "ai_prediction_factor": 0.65,  # Predicción experta
-        "ai_move_speed": 20
+        "ai_reaction_speed": 0.25 + 0.30,  # IA máxima velocidad
+        "ai_prediction_factor": 0.65 + 0.30,  # Predicción experta
+        "ai_move_speed": 20 + 10
     }
 }
 
