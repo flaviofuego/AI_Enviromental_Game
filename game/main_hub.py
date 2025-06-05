@@ -11,6 +11,7 @@ sys.path.append(project_root)
 from game.pages.home import HockeyMainScreen
 from game.pages.Level_Select import LevelSelectScreen
 from game.config.save_system import GameSaveSystem
+from game.components.AudioManager import audio_manager
 from main_improved import main as start_game
 
 def ice_melt_transition(screen, fade_out=True, duration=1.5):
@@ -179,9 +180,16 @@ if __name__ == "__main__":
     selected_level = None
     exit_game = False
     
+    # Iniciar música del menú principal
+    audio_manager.preload_audio_for_screen("home")
+    audio_manager.play_music("home")
+    
     # Bucle principal del controlador de pantallas
     while not exit_game:
         if current_screen == "home":
+            # Asegurar que esté sonando la música del home
+            audio_manager.play_music("home")
+            
             # Iniciar pantalla principal con la ventana existente y el sistema de guardado
             main_screen = HockeyMainScreen(screen, save_system)
             
@@ -195,10 +203,15 @@ if __name__ == "__main__":
             if result == "exit":
                 exit_game = True
             elif result == "level_select":
+                audio_manager.play_sound_effect("transition")
                 transition_effect(screen, fade_out=True)
                 current_screen = "level_select"
             
         elif current_screen == "level_select":
+            # Cambiar música para selección de niveles
+            audio_manager.play_music("level_select")
+            audio_manager.preload_audio_for_screen("level_select")
+            
             # Iniciar pantalla de selección de nivel con la ventana existente y el sistema de guardado
             level_screen = LevelSelectScreen(save_system, screen)
             
@@ -212,9 +225,15 @@ if __name__ == "__main__":
             if result == "exit":
                 exit_game = True
             elif result == "back_to_menu":
+                audio_manager.play_sound_effect("transition")
                 transition_effect(screen, fade_out=True)
                 current_screen = "home"
             elif result and result.startswith("start_level_"):
+                # Cambiar a música de gameplay
+                audio_manager.play_music("gameplay")
+                audio_manager.preload_audio_for_screen("gameplay")
+                
+                # Aquí implementarías la carga del nivel específico
                 # Extract level ID and start the game
                 level_id = int(result.split("_")[-1])
                 print(f"Iniciando nivel {level_id}")
@@ -226,6 +245,9 @@ if __name__ == "__main__":
                 # Return to menu after game ends
                 transition_effect(screen, fade_out=True)
                 current_screen = "home"
+    
+    # Limpiar recursos de audio al salir
+    audio_manager.cleanup()
     
     # Finalizar Pygame al salir
     pygame.quit()

@@ -8,6 +8,8 @@ from ..config.save_system import GameSaveSystem
 from ..components.Button import Button
 from ..components.LevelThumbnail import LevelThumbnail
 from ..components.Card import Card
+from ..components.AudioManager import audio_manager
+from ..components.PopUp import PopUp, create_help_popup
 
 class LevelSelectScreen:
     def __init__(self, save_system=None, screen=None):
@@ -202,6 +204,12 @@ class LevelSelectScreen:
         self.thumbnails = {}
         for level in self.levels:
             self.thumbnails[level['id']] = LevelThumbnail(level['id'])
+        
+        # Precargar audio para esta pantalla
+        audio_manager.preload_audio_for_screen("level_select")
+
+        # Inicializar el popup de ayuda
+        self.help_popup = None
         
     def load_levels_status(self):
         """Actualizar el estado de los niveles según el perfil actual"""
@@ -566,18 +574,26 @@ class LevelSelectScreen:
         for i, level in enumerate(self.levels):
             if 'rect' in level and level['rect'].collidepoint(pos):
                 if level['unlocked']:
+                    # Reproducir sonido de selección
+                    audio_manager.play_sound_effect("button_click")
+                    
                     self.selected_level_index = i
                     self.selected_level = level
                     self.show_level_info = True
                     self.animate_selected = True
                     return True
                 else:
+                    # Sonido de error para nivel bloqueado
+                    audio_manager.play_sound_effect("button_click", volume_override=0.2)
                     self.show_message("Este nivel está bloqueado. ¡Completa los niveles anteriores primero!", "error")
                     return False
         
         # Comprobar clics en botones
         for key, button in self.buttons.items():
             if button['rect'].collidepoint(pos):
+                # Reproducir sonido de botón
+                audio_manager.play_sound_effect("button_click")
+                
                 if key == 'back':
                     # Volver al menú principal
                     return 'back_to_menu'
@@ -590,6 +606,11 @@ class LevelSelectScreen:
                     else:
                         self.show_message("Selecciona un nivel disponible para jugar", "error")
                         return False
+                elif key == 'help':
+                    # Mostrar popup de ayuda
+                    self.help_popup = create_help_popup(self.screen, "level_select")
+                    self.help_popup.show()
+                    return False
         
         # Clic en espacio vacío
         self.show_level_info = False
@@ -599,30 +620,52 @@ class LevelSelectScreen:
     def handle_hover(self, pos):
         """Manejar hover sobre elementos"""
         # Reset hover state
+        old_hover = self.hover_level_index
         self.hover_level_index = -1
         
         # Check hover over levels
         for i, level in enumerate(self.levels):
             if 'rect' in level and level['rect'].collidepoint(pos):
                 self.hover_level_index = i
+                # Reproducir sonido de hover si cambió
+                if old_hover != i and level['unlocked']:
+                    audio_manager.play_sound_effect("button_hover", volume_override=0.2)
                 return
     
     def run(self):
         """Bucle principal"""
         running = True
         result = None
-        
+
+        help_button = Button('help', (40, 40), (self.screen_width - 40, 40), "Ayuda")
+
         while running:
             dt = self.clock.tick(60) / 1000.0  # Delta time en segundos
             self.animation_time += dt
             
             # Actualizar partículas
             self.update_particles()
+
+            # Actualizar popup si existe
+            if self.help_popup:
+                popup_result = self.help_popup.update(dt)
+                if popup_result == "closed":
+                    self.help_popup = None
             
             # Procesar eventos
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     return "exit"  # Retornar "exit" directamente en lugar de volver al menú
+                
+                # Manejar eventos del popup si está visible
+                if self.help_popup and self.help_popup.is_visible():
+                    popup_action = self.help_popup.handle_event(event)
+                    if popup_action == "more_info":
+                        # Aquí podrías implementar alguna acción adicional
+                        pass
+                    continue  # Si el popup está visible, no procesar otros eventos
+                    
+
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Clic izquierdo
                         action = self.handle_click(event.pos)
@@ -642,7 +685,15 @@ class LevelSelectScreen:
             if self.show_level_info:
                 self.draw_level_details()
             self.draw_buttons()
+            help_button.draw(self.screen)
+            if help_button.is_clicked(pygame.mouse.get_pos()):
+                self.help_popup = create_help_popup(self.screen, "level_select")
+                self.help_popup.show()
             self.draw_message()
+
+            # Dibujar popup de ayuda si está visible
+            if self.help_popup:
+                self.help_popup.draw()
             
             # Actualizar pantalla
             pygame.display.flip()
