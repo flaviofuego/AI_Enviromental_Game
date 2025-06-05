@@ -758,8 +758,7 @@ if __name__ == "__main__":
         models = []
         
         fixed_models = [
-            "improved_models/fixed_air_hockey_final.zip",
-            "improved_models/quick_fixed_model_final.zip"
+            "improved_models/quick_fixed_model_final.zip",
         ]
         for model_path in fixed_models:
             if os.path.exists(model_path):
@@ -816,4 +815,578 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nExiting the game.")
         pygame.quit()
-        sys.exit() 
+        sys.exit()
+
+def start_game_with_level(level_id, save_system=None, screen=None):
+    """
+    Inicia el juego con configuración específica del nivel
+    
+    Args:
+        level_id (int): ID del nivel seleccionado (1-5)
+        save_system: Sistema de guardado del juego principal
+        screen: Pantalla de pygame existente (opcional)
+    
+    Returns:
+        dict: Resultados del juego (victoria, puntaje, etc.)
+    """
+    
+    # Configuración específica por nivel
+    level_configs = {
+        1: {
+            'name': "Basura en el Ártico",
+            'enemy': "SLICKWAVE",
+            'theme': "Plástico",
+            'difficulty': 'easy',
+            'model_preference': 'fixed',#cambiar a improved
+            'background_color': (173, 216, 230)  # Azul hielo
+        },
+        2: {
+            'name': "Agujero de Ozono",
+            'enemy': "UVBLADE", 
+            'theme': "Gases CFC",
+            'difficulty': 'medium',
+            'model_preference': 'enhanced',
+            'background_color': (255, 140, 0)  # Naranja advertencia
+        },
+        3: {
+            'name': "Tormenta de Smog",
+            'enemy': "SMOGATRON",
+            'theme': "Aire Contaminado", 
+            'difficulty': 'medium',
+            'model_preference': 'enhanced',
+            'background_color': (100, 100, 150)  # Gris azulado
+        },
+        4: {
+            'name': "Bosque Desvanecido",
+            'enemy': "DEFORESTIX",
+            'theme': "Deforestación",
+            'difficulty': 'hard',
+            'model_preference': 'fixed',
+            'background_color': (34, 139, 34)  # Verde esperanza
+        },
+        5: {
+            'name': "Isla de Calor Urbano",
+            'enemy': "HEATCORE",
+            'theme': "Calentamiento Urbano",
+            'difficulty': 'very_hard', 
+            'model_preference': 'fixed',
+            'background_color': (220, 50, 50)  # Rojo crítico
+        }
+    }
+    
+    if level_id not in level_configs:
+        raise ValueError(f"Nivel {level_id} no válido")
+    
+    config = level_configs[level_id]
+    
+    # Determinar modelo RL a usar basado en la dificultad del nivel
+    model_path = None
+    if config['model_preference'] == 'fixed':
+        # Niveles difíciles usan modelos con correcciones
+        for path in ["improved_models/quick_fixed_model_final.zip","improved_models/fixed_air_hockey_final.zip" ]:
+            if os.path.exists(path):
+                model_path = path
+                print(f"Using model: {model_path}") 
+                break
+    elif config['model_preference'] == 'enhanced':
+        # Niveles medios usan modelos mejorados
+        for path in ["improved_models/quick_enhanced_model_final.zip", "improved_models/enhanced_vertical_model_final.zip"]:
+            if os.path.exists(path):
+                model_path = path
+                print(f"Using model: {model_path}") 
+                
+                break
+    else:  # improved
+        # Niveles fáciles usan modelos legacy mejorados
+        for path in ["improved_models/quick_model_final.zip"]:
+            if os.path.exists(path):
+                model_path = path
+                print(f"Using model: {model_path}") 
+                break
+    
+    # Configurar ventana si no se proporciona
+    if screen is None:
+        pygame.init()
+        screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption(f"Hockey Is Melting Down - {config['name']}")
+        own_screen = True
+    else:
+        own_screen = False
+    
+    try:
+        # Llamar a la función main con configuración específica
+        result = main_with_config(
+            use_rl=model_path is not None,
+            model_path=model_path,
+            screen=screen,
+            level_config=config,
+            save_system=save_system
+        )
+        
+        # Actualizar progreso en el sistema de guardado
+        if save_system and result.get('victory'):
+            # Crear datos del nivel completado
+            level_data = {
+                "points": result.get('player_score', 0) * 100,  # Puntos basados en el puntaje
+                "level_completed": level_id,
+                "enemy_defeated": config['enemy'],
+                "planetary_progress": {
+                    # Progreso específico según el tema del nivel
+                    "oceanos_limpiados": 1 if level_id == 1 else 0,
+                    "ozono_restaurado": 1 if level_id == 2 else 0,
+                    "aire_purificado": 1 if level_id == 3 else 0,
+                    "bosques_replantados": 1 if level_id == 4 else 0,
+                    "ciudades_enfriadas": 1 if level_id == 5 else 0,
+                },
+                "stats": {
+                    "games_played": 1,
+                    "wins": 1 if result.get('victory') else 0,
+                    "losses": 0 if result.get('victory') else 1,
+                    "time_played": 300  # Aprox 5 minutos por partida
+                }
+            }
+            save_system.update_game_progress(level_data)
+        
+        return result
+        
+    finally:
+        if own_screen:
+            pygame.quit()
+
+def main_with_config(use_rl=False, model_path=None, screen=None, level_config=None, save_system=None):
+    """
+    Versión modificada de main() que acepta configuración externa
+    """
+    from constants import set_screen_dimensions, get_scale_factors
+    
+    # Usar la pantalla proporcionada o crear una nueva
+    if screen is None:
+        pygame.init()
+        screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        clock = pygame.time.Clock()
+        own_screen = True
+    else:
+        # Actualizar las dimensiones globales para que coincidan con la pantalla del menú
+        screen_width = screen.get_width()
+        screen_height = screen.get_height()
+        set_screen_dimensions(screen_width, screen_height)
+        
+        clock = pygame.time.Clock()
+        own_screen = False
+    
+    # Obtener dimensiones actuales después de la configuración
+    current_width, current_height = screen.get_width(), screen.get_height()
+    
+    # Aplicar configuración del nivel si se proporciona
+    if level_config:
+        # Cambiar título de ventana
+        pygame.display.set_caption(f"Nivel: {level_config['name']} - vs {level_config['enemy']}")
+    
+    # Crear objetos del juego con escalado
+    table = Table()
+    human_mallet = HumanMallet()
+    puck = Puck()
+    ai_mallet = AIMallet()
+    
+    # Aplicar escalado a los objetos del juego
+    scale_x, scale_y = get_scale_factors()
+    
+    # Escalar posiciones iniciales
+    human_mallet.position = [current_width // 4, current_height // 2]
+    human_mallet.rect.center = human_mallet.position
+    
+    ai_mallet.position = [current_width * 3 // 4, current_height // 2]
+    ai_mallet.rect.center = ai_mallet.position
+    
+    puck.position = [current_width // 2, current_height // 2]
+    puck.rect.center = puck.position
+    
+    # Cargar modelo RL si se especifica
+    model = None
+    model_type = "original"
+    
+    if use_rl and model_path:
+        try:
+            model, model_type = load_optimized_model(model_path)
+            print(f"Loaded model: {model_path}")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            use_rl = False
+    
+    # Variables del juego
+    player_score = 0
+    ai_score = 0
+    running = True
+    
+    # Game over state
+    game_over = False
+    winner = None
+    
+    # RL prediction management
+    last_action = 4  # Default to "stay" action
+    last_prediction_time = 0
+    prediction_interval = 20  # ms between predictions
+    
+    # Behavioral correction system
+    force_vertical_threshold = 80
+    vertical_move_cooldown = 15
+    last_vertical_move = 100
+    force_horizontal_threshold = 120
+    horizontal_move_cooldown = 15
+    last_horizontal_move = 100
+    movement_history = []
+    stuck_in_bottom_counter = 0
+    stuck_in_side_counter = 0
+    
+    # Frame skip for AI updates
+    frame_count = 0
+    frame_skip = 2
+    
+    # Physics time step control
+    last_physics_update = time.time()
+    fixed_physics_step = 1/120
+    
+    # For reset message
+    show_reset_message = False
+    reset_message_timer = 0
+    
+    # Button dimensions for retry
+    button_width = 200
+    button_height = 50
+    button_x = current_width // 2 - button_width // 2
+    button_y = current_height // 2 + 50
+      # Loop principal del juego (adaptado del main() original)
+    show_fps = False
+    half_width = current_width // 2
+    
+    # Sprite group
+    all_sprites = pygame.sprite.Group()
+    all_sprites.add(human_mallet, ai_mallet, puck)
+    
+    while running:
+        frame_start = time.time()
+        
+        # Get mouse position for both game and UI interaction
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # Handle all events at once
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                elif event.key == pygame.K_f:
+                    show_fps = not show_fps
+                elif event.key == pygame.K_r and not game_over:
+                    # Complete reset
+                    puck.reset(zero_velocity=True)
+                    human_mallet.position = [current_width // 4, current_height // 2]
+                    human_mallet.rect.center = human_mallet.position
+                    ai_mallet.position = [current_width * 3 // 4, current_height // 2]
+                    ai_mallet.rect.center = ai_mallet.position
+                    human_mallet.velocity = [0, 0]
+                    ai_mallet.velocity = [0, 0]
+                    show_reset_message = True
+                    reset_message_timer = pygame.time.get_ticks()
+        
+        # Only update game state if not in game over
+        if not game_over:
+            # Update human mallet with the mouse position
+            human_mallet.update(mouse_pos)
+            
+            # AI mallet control logic - with frame skipping
+            frame_count = (frame_count + 1) % frame_skip
+            
+            if use_rl and model is not None and frame_count == 0:
+                current_time = pygame.time.get_ticks()
+                
+                # Make predictions at specified intervals
+                if current_time - last_prediction_time > prediction_interval:
+                    # Create observation based on model type
+                    observation = create_observation_for_model(
+                        ai_mallet, puck, human_mallet, player_score, ai_score, model_type
+                    )
+                    
+                    # Make prediction with error handling
+                    try:
+                        action, _states = model.predict(observation, deterministic=True)
+                        # Convert numpy array to int if necessary
+                        if isinstance(action, np.ndarray):
+                            if action.ndim == 0:
+                                action = int(action.item())
+                            else:
+                                action = int(action[0])
+                        else:
+                            action = int(action)
+                        
+                        # BEHAVIORAL CORRECTION SYSTEM
+                        last_vertical_move += 1
+                        last_horizontal_move += 1
+                        movement_history.append(action)
+                        if len(movement_history) > 20:
+                            movement_history.pop(0)
+                          # Check if AI is stuck in the bottom of the field
+                        if ai_mallet.position[1] > current_height * 0.75:
+                            stuck_in_bottom_counter += 1
+                        else:
+                            stuck_in_bottom_counter = 0
+                        
+                        # Check if AI is stuck on the sides
+                        if (ai_mallet.position[0] > current_width * 0.85 or
+                            ai_mallet.position[0] < current_width * 0.55):
+                            stuck_in_side_counter += 1
+                        else:
+                            stuck_in_side_counter = 0
+                          # Calculate distances and game state
+                        y_distance = abs(puck.position[1] - ai_mallet.position[1])
+                        x_distance = abs(puck.position[0] - ai_mallet.position[0])
+                        puck_in_ai_half = puck.position[0] > current_width // 2
+                        
+                        # Count recent movements
+                        recent_vertical = sum(1 for a in movement_history[-10:] if a in [0, 1]) if len(movement_history) >= 10 else 0
+                        recent_horizontal = sum(1 for a in movement_history[-10:] if a in [2, 3]) if len(movement_history) >= 10 else 0
+                        
+                        # Force movement conditions
+                        force_vertical = False
+                        force_horizontal = False
+                        reason = ""
+                        
+                        # VERTICAL MOVEMENT FORCING
+                        if (y_distance > force_vertical_threshold and 
+                            last_vertical_move > vertical_move_cooldown and 
+                            puck_in_ai_half and recent_vertical < 2):
+                            force_vertical = True
+                            reason = "puck_far_vertical"
+                        elif stuck_in_bottom_counter > 5 and recent_vertical == 0:
+                            force_vertical = True
+                            reason = "stuck_in_bottom"
+                        elif (len(movement_history) >= 15 and recent_vertical == 0 and 
+                              puck_in_ai_half and y_distance > 40):
+                            force_vertical = True
+                            reason = "no_recent_vertical"
+                        
+                        # HORIZONTAL MOVEMENT FORCING
+                        if (not force_vertical and x_distance > force_horizontal_threshold and 
+                            last_horizontal_move > horizontal_move_cooldown and 
+                            puck_in_ai_half and recent_horizontal < 2):
+                            force_horizontal = True
+                            reason = "puck_far_horizontal"
+                        elif (not force_vertical and stuck_in_side_counter > 5 and recent_horizontal == 0):
+                            force_horizontal = True
+                            reason = "stuck_in_side"
+                        elif (not force_vertical and len(movement_history) >= 15 and recent_horizontal == 0 and 
+                              puck_in_ai_half and x_distance > 60):
+                            force_horizontal = True
+                            reason = "no_recent_horizontal"
+                        
+                        # Apply forced movements (vertical has priority)
+                        if force_vertical:
+                            if puck.position[1] < ai_mallet.position[1]:
+                                action = 0  # Up
+                            else:
+                                action = 1  # Down
+                            last_vertical_move = 0
+                        elif force_horizontal:
+                            if puck.position[0] > ai_mallet.position[0]:
+                                action = 3  # Right
+                            else:
+                                action = 2  # Left
+                            last_horizontal_move = 0
+                        
+                        last_action = action
+                    except Exception as e:
+                        print(f"Prediction error: {e}")
+                    
+                    last_prediction_time = current_time
+                
+                # Apply the action with fixed step size
+                prev_position = ai_mallet.position.copy()
+                move_amount = 7
+                
+                if last_action == 0:  # Up
+                    ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
+                elif last_action == 1:  # Down
+                    ai_mallet.position[1] = min(ai_mallet.position[1] + move_amount, current_height - ai_mallet.radius)
+                elif last_action == 2:  # Left
+                    ai_mallet.position[0] = max(ai_mallet.position[0] - move_amount, half_width + ai_mallet.radius)
+                elif last_action == 3:  # Right
+                    ai_mallet.position[0] = min(ai_mallet.position[0] + move_amount, current_width - ai_mallet.radius)
+                
+                # Update rect and calculate velocity
+                ai_mallet.rect.center = ai_mallet.position
+                ai_mallet.velocity = [
+                    (ai_mallet.position[0] - prev_position[0]),
+                    (ai_mallet.position[1] - prev_position[1])
+                ]
+            else:
+                # Use simple AI behavior when RL is not active
+                if not use_rl:
+                    ai_mallet.update(puck.position)
+            
+            # Fixed physics time stepping
+            current_time = time.time()
+            elapsed = current_time - last_physics_update
+            
+            if elapsed >= fixed_physics_step:
+                puck.update()
+                last_physics_update = current_time
+            
+            # Check collisions
+            if puck.check_mallet_collision(human_mallet):
+                if vector_length(puck.velocity) < 2:
+                    direction = normalize_vector([
+                        puck.position[0] - human_mallet.position[0],
+                        puck.position[1] - human_mallet.position[1]
+                    ])
+                    puck.velocity[0] += direction[0] * 1
+                    puck.velocity[1] += direction[1] * 1
+            
+            if puck.check_mallet_collision(ai_mallet):
+                if vector_length(puck.velocity) < 2:
+                    direction = normalize_vector([
+                        puck.position[0] - ai_mallet.position[0],
+                        puck.position[1] - ai_mallet.position[1]
+                    ])
+                    puck.velocity[0] += direction[0] * 1
+                    puck.velocity[1] += direction[1] * 1
+            
+            # Check for goals
+            goal = table.is_goal(puck)
+            if goal == "player":
+                player_score += 1
+                puck.reset("player")
+                if player_score >= 7:
+                    game_over = True
+                    winner = "player"
+                    # Stop puck and mallets when game is over
+                    puck.velocity = [0, 0]
+                    human_mallet.velocity = [0, 0]
+                    ai_mallet.velocity = [0, 0]
+            elif goal == "ai":
+                ai_score += 1
+                puck.reset("ai")
+                if ai_score >= 7:
+                    game_over = True
+                    winner = "ai"
+                    # Stop puck and mallets when game is over
+                    puck.velocity = [0, 0]
+                    human_mallet.velocity = [0, 0]
+                    ai_mallet.velocity = [0, 0]
+        
+        # Draw everything
+        table.draw(screen)
+        
+        # Draw glows
+        current_fps = clock.get_fps()
+        if not show_fps or current_fps == 0 or current_fps > 40:
+            draw_glow(screen, (255, 0, 0), human_mallet.position, human_mallet.radius)
+            draw_glow(screen, (0, 255, 0), ai_mallet.position, ai_mallet.radius)
+            draw_glow(screen, (0, 0, 255), puck.position, puck.radius)
+        
+        # Draw sprites
+        all_sprites.draw(screen)
+        
+        # Draw UI elements
+        font = pygame.font.Font(None, 36)
+        score_text = font.render(f"{player_score} - {ai_score}", True, WHITE)
+        screen.blit(score_text, (current_width // 2 - score_text.get_width() // 2, 20))
+        
+        # Draw game over screen if game is over
+        if game_over:
+            # Semi-transparent overlay
+            overlay = pygame.Surface((current_width, current_height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 128))
+            screen.blit(overlay, (0, 0))
+            
+            # Game over text
+            game_over_text = "¡Has Ganado!" if winner == "player" else "¡Has Perdido!"
+            game_over_surface = font.render(game_over_text, True, WHITE)
+            game_over_rect = game_over_surface.get_rect(center=(current_width // 2, current_height // 2 - 50))
+            screen.blit(game_over_surface, game_over_rect)
+            
+            # Draw retry button
+            button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+            button_color = (70, 70, 70) if button_rect.collidepoint(mouse_pos) else (50, 50, 50)
+            pygame.draw.rect(screen, button_color, button_rect)
+            pygame.draw.rect(screen, WHITE, button_rect, 2)
+            retry_text = font.render("Reintentar", True, WHITE)
+            retry_rect = retry_text.get_rect(center=(current_width // 2, button_y + button_height // 2))
+            screen.blit(retry_text, retry_rect)
+            
+            # Check for button click
+            if button_rect.collidepoint(mouse_pos) and pygame.mouse.get_pressed()[0]:
+                # Reset game
+                player_score = 0
+                ai_score = 0
+                game_over = False
+                winner = None
+                puck.reset(zero_velocity=True)
+                human_mallet.position = [current_width // 4, current_height // 2]
+                human_mallet.rect.center = human_mallet.position
+                ai_mallet.position = [current_width * 3 // 4, current_height // 2]
+                ai_mallet.rect.center = ai_mallet.position
+                human_mallet.velocity = [0, 0]
+                ai_mallet.velocity = [0, 0]
+                show_reset_message = True
+                reset_message_timer = pygame.time.get_ticks()
+        
+        # Show model type and mode
+        if use_rl:
+            if "fixed" in str(model).lower() if model else False:
+                mode_text = font.render("Mode: Fixed RL (Full Movement Corrections)", True, WHITE)
+            elif model_type == "enhanced":
+                mode_text = font.render("Mode: Enhanced RL (Vertical & Horizontal Movement)", True, WHITE)
+            else:
+                mode_text = font.render(f"Mode: {model_type.title()} RL (Movement Corrections)", True, WHITE)
+        else:
+            mode_text = font.render("Mode: Simple AI", True, WHITE)
+        
+        screen.blit(mode_text, (current_width // 2 - mode_text.get_width() // 2, current_height - 50))
+        
+        controls_text = font.render("F: FPS | R: Reset | ESC: Salir", True, WHITE)
+        screen.blit(controls_text, (10, current_height - 30))
+        
+        # Show reset message if active
+        if show_reset_message:
+            if pygame.time.get_ticks() - reset_message_timer < 1500:
+                reset_text = font.render("¡Juego Reiniciado!", True, WHITE)
+                text_rect = reset_text.get_rect(center=(current_width // 2, current_height // 2 - 50))
+                screen.blit(reset_text, text_rect)
+            else:
+                show_reset_message = False
+        
+        # Show FPS and debug info
+        if show_fps:
+            fps = clock.get_fps()
+            fps_text = font.render(f"FPS: {int(fps)}", True, WHITE)
+            screen.blit(fps_text, (10, 10))
+            
+            # Show puck velocity
+            vel_magnitude = vector_length(puck.velocity)
+            vel_text = font.render(f"Puck Vel: {vel_magnitude:.2f}", True, WHITE)
+            screen.blit(vel_text, (10, 40))
+            
+            # Show AI info if using RL
+            if use_rl and model:
+                action_names = ["Up", "Down", "Left", "Right", "Stay"]
+                action_text = font.render(f"AI Action: {action_names[last_action]}", True, WHITE)
+                screen.blit(action_text, (10, 70))
+                
+                # Show model info
+                model_info = font.render(f"Model: {model_type}", True, WHITE)
+                screen.blit(model_info, (10, 100))
+        
+        # Update display
+        pygame.display.flip()
+        
+        # Maintain consistent frame rate
+        clock.tick(FPS)
+    
+    # Return game result
+    return {
+        'victory': winner == "player" if game_over else False,
+        'player_score': player_score,
+        'ai_score': ai_score,
+        'level_id': level_config.get('id') if level_config else None
+    }

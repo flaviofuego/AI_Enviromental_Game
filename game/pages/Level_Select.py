@@ -515,59 +515,158 @@ class LevelSelectScreen:
     
     def draw_message(self):
         """Dibujar mensaje temporal si existe"""
-        if self.message and time.time() - self.message_time < 3:
-            # Elegir color según tipo de mensaje
-            if self.message_type == "success":
-                color = self.colors['hope_green']
-            elif self.message_type == "error":
-                color = self.colors['critical_red']
-            else:
-                color = self.colors['ice_blue']
-                
-            # Crear mensaje
-            message_surface = self.font_text.render(self.message, True, color)
-            message_rect = message_surface.get_rect(center=(self.screen_width // 2, self.screen_height - 20))
+        if self.message and self.message_time > 0:
+            # Verificar si el mensaje debe desaparecer (después de 3 segundos)
+            current_time = pygame.time.get_ticks()
+            if current_time - self.message_time > 3000:
+                self.message = ""
+                self.message_time = 0
+                return
             
-            # Fondo del mensaje
-            bg_rect = message_rect.inflate(40, 10)
-            bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
-            bg_surface.fill((20, 20, 40, 200))
-            self.screen.blit(bg_surface, bg_rect)
-            pygame.draw.rect(self.screen, color, bg_rect, 1)
+            # Configurar colores según el tipo de mensaje
+            if self.message_type == "error":
+                bg_color = (220, 50, 50, 200)
+                text_color = (255, 255, 255)
+            elif self.message_type == "success":
+                bg_color = (50, 180, 50, 200)
+                text_color = (255, 255, 255)
+            else:  # info
+                bg_color = (50, 150, 200, 200)
+                text_color = (255, 255, 255)
+            
+            # Crear superficie del mensaje
+            message_surface = self.font_text.render(self.message, True, text_color)
+            
+            # Configurar dimensiones y posición
+            padding = 20
+            message_width = message_surface.get_width() + (padding * 2)
+            message_height = message_surface.get_height() + (padding * 2)
+            
+            message_x = (self.screen_width - message_width) // 2
+            message_y = 100  # Mostrar en la parte superior
+            
+            # Crear panel del mensaje
+            panel_surface = pygame.Surface((message_width, message_height), pygame.SRCALPHA)
+            panel_surface.fill(bg_color)
+            
+            # Dibujar borde
+            pygame.draw.rect(panel_surface, text_color, 
+                           (0, 0, message_width, message_height), 2)
             
             # Dibujar texto
-            self.screen.blit(message_surface, message_rect)
-    
+            text_x = padding
+            text_y = padding
+            panel_surface.blit(message_surface, (text_x, text_y))
+            
+            # Dibujar en pantalla
+            self.screen.blit(panel_surface, (message_x, message_y))
+
     def wrap_text(self, text, font, max_width):
-        """Partir texto en múltiples líneas para ajustar a un ancho máximo"""
+        """Dividir texto en múltiples líneas si es necesario"""
         words = text.split(' ')
         lines = []
         current_line = []
         
         for word in words:
-            # Probar añadir esta palabra a la línea actual
             test_line = ' '.join(current_line + [word])
-            width, _ = font.size(test_line)
+            test_surface = font.render(test_line, True, (255, 255, 255))
             
-            if width <= max_width:
+            if test_surface.get_width() <= max_width:
                 current_line.append(word)
             else:
-                # Si no cabe, comenzar nueva línea
-                lines.append(' '.join(current_line))
+                if current_line:
+                    lines.append(' '.join(current_line))
                 current_line = [word]
         
-        # Añadir la última línea
         if current_line:
             lines.append(' '.join(current_line))
-            
+        
         return lines
     
     def show_message(self, message, message_type="info"):
-        """Mostrar un mensaje temporal en pantalla"""
+        """Mostrar mensaje temporal"""
         self.message = message
-        self.message_time = time.time()
         self.message_type = message_type
+        self.message_time = pygame.time.get_ticks()
     
+    def start_level(self, level_id):
+        """
+        Función para iniciar un nivel específico del juego
+        
+        Args:
+            level_id (int): ID del nivel a iniciar
+            
+        Returns:
+            str: Resultado del juego o None si hay error
+        """
+        try:
+            # Importar la función de integración del juego principal
+            import os
+            import sys
+            
+            # Obtener la ruta del directorio raíz del proyecto
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            root_dir = os.path.dirname(os.path.dirname(current_dir))
+            
+            # Agregar la ruta al path para poder importar main_improved
+            if root_dir not in sys.path:
+                sys.path.append(root_dir)
+            
+            from main_improved import start_game_with_level
+            
+            # Verificar que el nivel existe y está desbloqueado
+            level_data = None
+            for level in self.levels:
+                if level['id'] == level_id:
+                    level_data = level
+                    break
+            
+            if not level_data:
+                self.show_message(f"Error: Nivel {level_id} no encontrado", "error")
+                return None
+            
+            if not level_data['unlocked']:
+                self.show_message("Nivel bloqueado. Completa el nivel anterior.", "error")
+                return None
+            
+            # Mostrar mensaje de carga
+            self.show_message(f"Iniciando {level_data['name']}...", "info")
+            self.draw_background()
+            self.draw_title()
+            self.draw_level_cards()
+            self.draw_buttons()
+            self.draw_message()
+            pygame.display.flip()
+            
+            # Pausa breve para mostrar el mensaje
+            pygame.time.wait(500)
+              # Iniciar el juego con la configuración del nivel
+            result = start_game_with_level(
+                level_id=level_id,
+                save_system=self.save_system,
+                screen=self.screen
+            )
+            
+            # Actualizar el estado del nivel después del juego
+            self.load_levels_status()
+            
+            # Mostrar resultado
+            if result == "victory":
+                self.show_message(f"¡Felicidades! Has completado {level_data['name']}", "success")
+            elif result == "defeat":
+                self.show_message(f"Intenta de nuevo. {level_data['name']} te espera.", "info")
+            else:
+                self.show_message("Juego cancelado", "info")
+            
+            return result
+            
+        except ImportError as e:
+            self.show_message(f"Error: No se pudo cargar el juego principal: {e}", "error")
+            return None
+        except Exception as e:
+            self.show_message(f"Error inesperado: {e}", "error")
+            return None
+
     def handle_click(self, pos):
         """Manejar clics del mouse"""
         # Comprobar clics en niveles
@@ -587,8 +686,7 @@ class LevelSelectScreen:
                     audio_manager.play_sound_effect("button_click", volume_override=0.2)
                     self.show_message("Este nivel está bloqueado. ¡Completa los niveles anteriores primero!", "error")
                     return False
-        
-        # Comprobar clics en botones
+          # Comprobar clics en botones
         for key, button in self.buttons.items():
             if button['rect'].collidepoint(pos):
                 # Reproducir sonido de botón
@@ -602,7 +700,10 @@ class LevelSelectScreen:
                     if (self.selected_level_index >= 0 and 
                         self.levels[self.selected_level_index]['unlocked']):
                         level_id = self.levels[self.selected_level_index]['id']
-                        return f'start_level_{level_id}'
+                        # Iniciar el nivel directamente
+                        result = self.start_level(level_id)
+                        # Si fue exitoso, no retornar nada para mantener la pantalla de selección abierta
+                        return None
                     else:
                         self.show_message("Selecciona un nivel disponible para jugar", "error")
                         return False

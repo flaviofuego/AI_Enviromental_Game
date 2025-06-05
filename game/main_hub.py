@@ -199,8 +199,7 @@ if __name__ == "__main__":
             
             # Ejecutar pantalla principal y obtener siguiente acción
             result = main_screen.run()
-            
-            # Procesar resultado de la pantalla principal
+              # Procesar resultado de la pantalla principal
             if result == "exit":
                 exit_game = True
             elif result == "level_select":
@@ -229,23 +228,7 @@ if __name__ == "__main__":
                 audio_manager.play_sound_effect("transition")
                 transition_effect(screen, fade_out=True)
                 current_screen = "home"
-            elif result and result.startswith("start_level_"):
-                # Cambiar a música de gameplay
-                audio_manager.play_music("gameplay")
-                audio_manager.preload_audio_for_screen("gameplay")
-                
-                # Aquí implementarías la carga del nivel específico
-                # Extract level ID and start the game
-                level_id = int(result.split("_")[-1])
-                print(f"Iniciando nivel {level_id}")
-                
-                # Start the game with the selected level
-                transition_effect(screen, fade_out=True)
-                start_game(level_id=level_id, debug_mode=False)
-                
-                # Return to menu after game ends
-                transition_effect(screen, fade_out=True)
-                current_screen = "home"
+            # Ya no necesitamos manejar start_level_ porque Level_Select lo maneja internamente
     
     # Limpiar recursos de audio al salir
     audio_manager.cleanup()
