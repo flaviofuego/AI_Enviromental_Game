@@ -1421,34 +1421,70 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
             # Game over text
             game_over_text = "¡Has Ganado!" if winner == "player" else "¡Has Perdido!"
             game_over_surface = font.render(game_over_text, True, WHITE)
-            game_over_rect = game_over_surface.get_rect(center=(current_width // 2, current_height // 2 - 50))
+            game_over_rect = game_over_surface.get_rect(center=(current_width // 2, current_height // 2 - 100))
             screen.blit(game_over_surface, game_over_rect)
             
-            # Draw retry button
-            button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
-            button_color = (70, 70, 70) if button_rect.collidepoint(mouse_pos) else (50, 50, 50)
-            pygame.draw.rect(screen, button_color, button_rect)
-            pygame.draw.rect(screen, WHITE, button_rect, 2)
-            retry_text = font.render("Reintentar", True, WHITE)
-            retry_rect = retry_text.get_rect(center=(current_width // 2, button_y + button_height // 2))
-            screen.blit(retry_text, retry_rect)
+            # Configuración de botones
+            button_radius = 60
+            button_y = current_height // 2 + 50
+            button_spacing = 150
             
-            # Check for button click
-            if button_rect.collidepoint(mouse_pos) and pygame.mouse.get_pressed()[0]:
-                # Reset game
-                player_score = 0
-                ai_score = 0
-                game_over = False
-                winner = None
-                puck.reset(zero_velocity=True)
-                human_mallet.position = [current_width // 4, current_height // 2]
-                human_mallet.rect.center = human_mallet.position
-                ai_mallet.position = [current_width * 3 // 4, current_height // 2]
-                ai_mallet.rect.center = ai_mallet.position
-                human_mallet.velocity = [0, 0]
-                ai_mallet.velocity = [0, 0]
-                show_reset_message = True
-                reset_message_timer = pygame.time.get_ticks()
+            # Botón Reintentar (verde)
+            retry_color = (0, 100, 0) if pygame.Rect(
+                current_width//2 - button_spacing - button_radius, 
+                button_y - button_radius, 
+                button_radius*2, 
+                button_radius*2
+            ).collidepoint(mouse_pos) else (0, 70, 0)
+            
+            retry_btn = draw_round_button(
+                screen, 
+                retry_color, 
+                (current_width//2 - button_spacing, button_y), 
+                button_radius, 
+                "Reintentar", 
+                32
+            )
+            
+            # Botón Salir (rojo)
+            quit_color = (100, 0, 0) if pygame.Rect(
+                current_width//2 + button_spacing - button_radius, 
+                button_y - button_radius, 
+                button_radius*2, 
+                button_radius*2
+            ).collidepoint(mouse_pos) else (70, 0, 0)
+            
+            quit_btn = draw_round_button(
+                screen, 
+                quit_color, 
+                (current_width//2 + button_spacing, button_y), 
+                button_radius, 
+                "Salir", 
+                32
+            )
+            
+            # Manejar clics en los botones
+            if mouse_clicked:  # Usamos la variable mouse_clicked que ya está definida
+                if retry_btn.collidepoint(mouse_pos):
+                    # Reset game
+                    player_score = 0
+                    ai_score = 0
+                    game_over = False
+                    winner = None
+                    paused = False
+                    waiting_for_resume_click = False
+                    puck.reset(zero_velocity=True)
+                    human_mallet.position = [current_width // 4, current_height // 2]
+                    human_mallet.rect.center = human_mallet.position
+                    ai_mallet.position = [current_width * 3 // 4, current_height // 2]
+                    ai_mallet.rect.center = ai_mallet.position
+                    human_mallet.velocity = [0, 0]
+                    ai_mallet.velocity = [0, 0]
+                    show_reset_message = True
+                    reset_message_timer = pygame.time.get_ticks()
+                
+                elif quit_btn.collidepoint(mouse_pos):
+                    running = False
         
         # Show model type and mode
         if use_rl:
