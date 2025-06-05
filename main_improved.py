@@ -281,7 +281,7 @@ def find_best_model():
     
     return None, None
 
-def main(use_rl=False, model_path=None):
+def main(level_id=None, debug_mode=True):
     """Main game function with support for improved models"""
     # Initialize pygame
     pygame.init()
@@ -301,41 +301,31 @@ def main(use_rl=False, model_path=None):
     model = None
     model_type = "original"
     
-    if use_rl:
-        try:
-            print("Loading RL model...")
+    try:
+        print("Loading RL model...")
+        
+        # Auto-detect best model
+        model_path, model_type = find_best_model()
+        if model_path:
+            model, model_type = load_optimized_model(model_path)
+            print(f"Auto-selected model: {model_path}")
+            print("Model loaded successfully!")
+            print(f"Model type: {model_type}")
             
-            # Use specified model or find best available
-            if model_path and os.path.exists(model_path):
-                model, model_type = load_optimized_model(model_path)
+            # Pre-warm the model
+            if model_type == "enhanced":
+                dummy_obs = np.zeros((21,), dtype=np.float32)
+            elif model_type == "improved":
+                dummy_obs = np.zeros((21,), dtype=np.float32)
             else:
-                auto_model_path, auto_model_type = find_best_model()
-                if auto_model_path:
-                    model, model_type = load_optimized_model(auto_model_path, auto_model_type)
-                    print(f"Auto-selected model: {auto_model_path}")
-                else:
-                    print("No model file found")
-                    use_rl = False
-                    
-            if model:
-                print("Model loaded successfully!")
-                print(f"Model type: {model_type}")
-                
-                # Pre-warm the model with appropriate observation size
-                if model_type == "enhanced":
-                    dummy_obs = np.zeros((21,), dtype=np.float32)
-                elif model_type == "improved":
-                    dummy_obs = np.zeros((21,), dtype=np.float32)
-                else:
-                    dummy_obs = np.zeros((13,), dtype=np.float32)
-                model.predict(dummy_obs, deterministic=True)
-            else:
-                print("Failed to load model")
-                use_rl = False
-        except Exception as e:
-            print(f"Error loading model: {e}")
-            use_rl = False
-            print("Falling back to simple AI")
+                dummy_obs = np.zeros((13,), dtype=np.float32)
+            model.predict(dummy_obs, deterministic=True)
+        else:
+            print("No model file found")
+            return
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        return
     
     # Sprite group
     all_sprites = pygame.sprite.Group()
@@ -345,25 +335,21 @@ def main(use_rl=False, model_path=None):
     player_score = 0
     ai_score = 0
     
-    # Game over state
-    game_over = False
-    winner = None
-    
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
     prediction_interval = 15  # ms between predictions (reducido de 20 para más responsividad)
     
     # Behavioral correction system
-    force_vertical_threshold = 80  # Force vertical movement if puck is this far vertically
-    vertical_move_cooldown = 15  # Frames between forced vertical moves
-    last_vertical_move = 100  # Time since last vertical move
-    force_horizontal_threshold = 120  # Force horizontal movement if puck is this far horizontally
-    horizontal_move_cooldown = 15  # Frames between forced horizontal moves
-    last_horizontal_move = 100  # Time since last horizontal move
-    movement_history = []  # Track recent actions
-    stuck_in_bottom_counter = 0  # Counter for being stuck in bottom
-    stuck_in_side_counter = 0  # Counter for being stuck in side
+    force_vertical_threshold = 80
+    vertical_move_cooldown = 15
+    last_vertical_move = 100
+    force_horizontal_threshold = 120
+    horizontal_move_cooldown = 15
+    last_horizontal_move = 100
+    movement_history = []
+    stuck_in_bottom_counter = 0
+    stuck_in_side_counter = 0
     
     # Frame skip for AI updates
     frame_count = 0
@@ -377,6 +363,10 @@ def main(use_rl=False, model_path=None):
     show_reset_message = False
     reset_message_timer = 0
     
+    # Game over state
+    game_over = False
+    winner = None
+    
     # Button dimensions for retry
     button_width = 200
     button_height = 50
@@ -387,8 +377,11 @@ def main(use_rl=False, model_path=None):
     running = True
     show_fps = False
     
-    # Precompute some values
-    half_width = WIDTH // 2
+    # Get level configuration if level_id is provided
+    if level_id is not None:
+        from game.config.level_config import get_level_config
+        level_config = get_level_config(level_id)
+        table.table_color = level_config["theme"]["table_color"]
     
     while running:
         frame_start = time.time()
@@ -401,54 +394,23 @@ def main(use_rl=False, model_path=None):
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_f:
-                    show_fps = not show_fps
-                elif event.key == pygame.K_r and not game_over:  # Only allow reset when not in game over
-                    # Complete reset
-                    puck.reset(zero_velocity=True)
-                    
-                    # Reset mallet positions
-                    human_mallet.position = [WIDTH // 4, HEIGHT // 2]
-                    human_mallet.rect.center = human_mallet.position
-                    ai_mallet.position = [WIDTH * 3 // 4, HEIGHT // 2]
-                    ai_mallet.rect.center = ai_mallet.position
-                    
-                    # Reset velocities
-                    human_mallet.velocity = [0, 0]
-                    ai_mallet.velocity = [0, 0]
-                    
-                    # Show reset message
-                    show_reset_message = True
-                    reset_message_timer = pygame.time.get_ticks()
-                elif event.key == pygame.K_ESCAPE:
+                if debug_mode:
+                    if event.key == pygame.K_f:
+                        show_fps = not show_fps
+                    elif event.key == pygame.K_r and not game_over:
+                        # Complete reset
+                        puck.reset(zero_velocity=True)
+                        human_mallet.position = [WIDTH // 4, HEIGHT // 2]
+                        human_mallet.rect.center = human_mallet.position
+                        ai_mallet.position = [WIDTH * 3 // 4, HEIGHT // 2]
+                        ai_mallet.rect.center = ai_mallet.position
+                        human_mallet.velocity = [0, 0]
+                        ai_mallet.velocity = [0, 0]
+                        show_reset_message = True
+                        reset_message_timer = pygame.time.get_ticks()
+                if event.key == pygame.K_ESCAPE:
                     running = False
-                elif event.key == pygame.K_m:  # Allow model switch at any time
-                    # Switch model type (if multiple available)
-                    if use_rl:
-                        print("Switching to next available model...")
-                        # Find next model
-                        current_improved = model_type == "improved"
-                        if current_improved:
-                            # Try Fixed models
-                            for path in ["improved_models/fixed_air_hockey_final.zip", "improved_models/quick_fixed_model_final.zip"]:
-                                if os.path.exists(path):
-                                    try:
-                                        model, model_type = load_optimized_model(path, "enhanced")
-                                        print(f"Switched to: {path}")
-                                        break
-                                    except:
-                                        continue
-                        else:
-                            # Try improved models
-                            for path in ["improved_models/improved_air_hockey_final.zip", "improved_models/quick_model_final.zip"]:
-                                if os.path.exists(path):
-                                    try:
-                                        model, model_type = load_optimized_model(path, "improved")
-                                        print(f"Switched to: {path}")
-                                        break
-                                    except:
-                                        continue
-        
+
         # Only update game state if not in game over
         if not game_over:
             # Update human mallet with the mouse position we got earlier
@@ -457,7 +419,7 @@ def main(use_rl=False, model_path=None):
             # AI mallet control logic - with frame skipping
             frame_count = (frame_count + 1) % frame_skip
             
-            if use_rl and model is not None and frame_count == 0:
+            if model is not None and frame_count == 0:
                 current_time = pygame.time.get_ticks()
                 
                 # Make predictions at specified intervals
@@ -589,7 +551,7 @@ def main(use_rl=False, model_path=None):
                 elif last_action == 1:  # Down
                     ai_mallet.position[1] = min(ai_mallet.position[1] + move_amount, HEIGHT - ai_mallet.radius)
                 elif last_action == 2:  # Left
-                    ai_mallet.position[0] = max(ai_mallet.position[0] - move_amount, half_width + ai_mallet.radius)
+                    ai_mallet.position[0] = max(ai_mallet.position[0] - move_amount, WIDTH // 2 + ai_mallet.radius)
                 elif last_action == 3:  # Right
                     ai_mallet.position[0] = min(ai_mallet.position[0] + move_amount, WIDTH - ai_mallet.radius)
                 
@@ -603,6 +565,7 @@ def main(use_rl=False, model_path=None):
                 # Use simple AI behavior when RL is not active
                 if not use_rl:
                     ai_mallet.update(puck.position, puck.velocity)
+
             
             # Fixed physics time stepping - optimizado para 120 FPS
             current_time = time.time()
@@ -727,18 +690,15 @@ def main(use_rl=False, model_path=None):
                 reset_message_timer = pygame.time.get_ticks()
         
         # Show model type and mode
-        if use_rl:
-            if "fixed" in str(model).lower() if model else False:
-                mode_text = font.render("Mode: Fixed RL (Full Movement Corrections)", True, WHITE)
-            elif model_type == "enhanced":
-                mode_text = font.render("Mode: Enhanced RL (Vertical & Horizontal Movement)", True, WHITE)
-            else:
-                mode_text = font.render(f"Mode: {model_type.title()} RL (Movement Corrections)", True, WHITE)
+        if "fixed" in str(model).lower() if model else False:
+            mode_text = font.render("Mode: Fixed RL (Full Movement Corrections)", True, WHITE)
+        elif model_type == "enhanced":
+            mode_text = font.render("Mode: Enhanced RL (Vertical & Horizontal Movement)", True, WHITE)
         else:
-            mode_text = font.render("Mode: Simple AI", True, WHITE)
+            mode_text = font.render(f"Mode: {model_type.title()} RL (Movement Corrections)", True, WHITE)
         screen.blit(mode_text, (WIDTH // 2 - mode_text.get_width() // 2, HEIGHT - 50))
         
-        controls_text = font.render("F: FPS | R: Reset | M: Switch Model | ESC: Quit", True, WHITE)
+        controls_text = font.render("F: FPS | R: Reset | ESC: Quit", True, WHITE)
         screen.blit(controls_text, (10, HEIGHT - 30))
         
         # Show reset message if active
@@ -762,7 +722,7 @@ def main(use_rl=False, model_path=None):
             screen.blit(vel_text, (10, 40))
             
             # Show AI info if using RL
-            if use_rl and model:
+            if model:
                 action_names = ["Up", "Down", "Left", "Right", "Stay"]
                 action_text = font.render(f"AI Action: {action_names[last_action]}", True, WHITE)
                 screen.blit(action_text, (10, 70))

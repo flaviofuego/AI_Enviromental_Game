@@ -25,7 +25,7 @@ class Table:
         current_width, current_height = get_screen_dimensions()
         
         # Fondo
-        screen.fill(BLACK)
+        screen.fill(self.table_color)
         
         # Línea central
         pygame.draw.line(screen, WHITE, (current_width // 2, 0), (current_width // 2, current_height), self.line_width)
