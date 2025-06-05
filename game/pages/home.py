@@ -100,6 +100,21 @@ class HockeyMainScreen:
             {'name': 'DEFORESTIX', 'desc': 'Talador de raíces\nDevora los pulmones del planeta', 'unlocked': False, 'defeated': False},
             {'name': 'HEATCORE', 'desc': 'Maestro del calor\nConvierte ciudades en hornos', 'unlocked': False, 'defeated': False}
         ]
+
+         # Definir las skins disponibles
+        self.available_skins = [
+            {'id': 'default', 'name': 'Predeterminado', 'color': (200, 200, 200)},
+            {'id': 'eco_warrior', 'name': 'Guerrero Eco', 'color': (100, 200, 100)},
+            {'id': 'arctic', 'name': 'Explorador Ártico', 'color': (150, 220, 255)},
+            {'id': 'volcano', 'name': 'Resistente Volcánico', 'color': (255, 100, 50)},
+            {'id': 'cyber', 'name': 'Hacker Climático', 'color': (100, 255, 200)},
+            {'id': 'retro', 'name': 'Retro Salvador', 'color': (255, 200, 100)},
+            {'id': 'scientist', 'name': 'Científico', 'color': (200, 200, 255)},
+            {'id': 'agent', 'name': 'Agente Especial', 'color': (50, 50, 100)},
+        ]
+        
+        # Inicializar la skin seleccionada por defecto
+        self.selected_skin_id = "default"
         
         # Botones circulares
         center_x = self.screen_width // 2
@@ -148,8 +163,10 @@ class HockeyMainScreen:
         # Cargar perfiles al iniciar
         self.load_profiles()
         if self.save_system.current_profile:
+            if "skin" in self.save_system.current_profile:
+                self.selected_skin_id = self.save_system.current_profile["skin"]
             audio_manager.load_audio_settings_from_profile(self.save_system)
-        
+
         self.clock = pygame.time.Clock()
     
     def load_profiles(self):
@@ -181,6 +198,12 @@ class HockeyMainScreen:
                     'levels_unlocked': profile["levels"]["unlocked"],
                     'current_level': profile["levels"]["current"]
                 }
+                
+                # Cargar la skin seleccionada si existe
+                if "skin" in profile:
+                    self.selected_skin_id = profile["skin"]
+                else:
+                    self.selected_skin_id = "default"
                 
                 # Actualizar estado de enemigos
                 for enemy in self.enemy_agents:
@@ -222,6 +245,11 @@ class HockeyMainScreen:
                 'levels_unlocked': 1,
                 'current_level': 1
             }
+
+            # Establecer skin por defecto
+            profile["skin"] = "default"
+            self.selected_skin_id = "default"
+            self.save_system.save_current_profile()
 
              # Guardar la configuración de audio actual en el perfil
             audio_manager.save_audio_settings_to_profile(self.save_system)
@@ -1138,19 +1166,6 @@ class HockeyMainScreen:
             subtitle_rect = subtitle.get_rect(center=(self.screen_width // 2, panel_y + 90))
             self.screen.blit(subtitle, subtitle_rect)
         
-        # Definir las skins disponibles (mejor mover esto a __init__)
-        available_skins = [
-            {'id': 'default', 'name': 'Predeterminado', 'color': (200, 200, 200)},
-            {'id': 'eco_warrior', 'name': 'Guerrero Eco', 'color': (100, 200, 100)},
-            {'id': 'arctic', 'name': 'Explorador Ártico', 'color': (150, 220, 255)},
-            {'id': 'volcano', 'name': 'Resistente Volcánico', 'color': (255, 100, 50)},
-            {'id': 'cyber', 'name': 'Hacker Climático', 'color': (100, 255, 200)},
-            {'id': 'retro', 'name': 'Retro Salvador', 'color': (255, 200, 100)},
-            {'id': 'scientist', 'name': 'Científico', 'color': (200, 200, 255)},
-            {'id': 'agent', 'name': 'Agente Especial', 'color': (50, 50, 100)},
-        ]
-        
-        # Obtener skin actual
         current_skin_id = getattr(self, 'selected_skin_id', 'default')
         if 0 <= self.selected_profile_index < len(self.profiles):
             current_skin_id = self.profiles[self.selected_profile_index].get('skin', current_skin_id)
@@ -1176,7 +1191,7 @@ class HockeyMainScreen:
         
         # Crear superficie para la skin
         skin_surface = pygame.Surface((preview_radius * 2, preview_radius * 2), pygame.SRCALPHA)
-        skin_color = next((sk['color'] for sk in available_skins if sk['id'] == current_skin_id), (200, 200, 200))
+        skin_color = next((sk['color'] for sk in self.available_skins if sk['id'] == current_skin_id), (200, 200, 200))
         
         # Dibujar círculo principal
         pygame.draw.circle(skin_surface, skin_color, (preview_radius, preview_radius), preview_radius)
@@ -1188,7 +1203,7 @@ class HockeyMainScreen:
         self.screen.blit(skin_surface, (preview_center_x - preview_radius, preview_center_y - preview_radius))
         
         # Nombre de la skin actual
-        skin_name = next((sk['name'] for sk in available_skins if sk['id'] == current_skin_id), "Predeterminado")
+        skin_name = next((sk['name'] for sk in self.available_skins if sk['id'] == current_skin_id), "Predeterminado")
         selected_text = self.font_text.render(f"Skin actual: {skin_name}", True, self.colors['text_gold'])
         self.screen.blit(selected_text, (preview_center_x - selected_text.get_width()//2, preview_center_y + preview_radius + 20))
 
@@ -1205,7 +1220,7 @@ class HockeyMainScreen:
         }
         
         # Organizar skins en 2 columnas
-        for i, skin in enumerate(available_skins[:max_skins]):
+        for i, skin in enumerate(self.available_skins[:max_skins]):
             row = i // skins_per_row
             col = i % skins_per_row
             
@@ -1270,6 +1285,21 @@ class HockeyMainScreen:
             for skin_data in ui_elements['skins']:
                 if skin_data['rect'].collidepoint(event.pos):
                     self.selected_skin_id = skin_data['skin_id']
+                    
+                    # Guardar la skin seleccionada en el perfil actual
+                    if 0 <= self.selected_profile_index < len(self.profiles):
+                        profile_id = self.profiles[self.selected_profile_index]["profile_id"]
+                        profile = self.save_system.load_profile(profile_id)
+                        
+                        if profile:
+                            profile["skin"] = self.selected_skin_id
+                            self.save_system.current_profile = profile
+                            self.save_system.save_current_profile()
+                            
+                            # Mostrar mensaje de confirmación
+                            self.success_message = f"¡Skin {skin_data['skin_id']} guardada!"
+                            self.message_time = time.time()
+                    
                     # Actualizar vista previa inmediatamente
                     return self.draw_skin_selection_screen()
             
