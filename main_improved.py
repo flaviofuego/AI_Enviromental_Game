@@ -955,12 +955,12 @@ def start_game_with_level(level_id, save_system=None, screen=None):
                 "level_completed": level_id,
                 "enemy_defeated": config['enemy'],
                 "planetary_progress": {
-                    # Progreso específico según el tema del nivel
-                    "oceanos_limpiados": 1 if level_id == 1 else 0,
-                    "ozono_restaurado": 1 if level_id == 2 else 0,
-                    "aire_purificado": 1 if level_id == 3 else 0,
-                    "bosques_replantados": 1 if level_id == 4 else 0,
-                    "ciudades_enfriadas": 1 if level_id == 5 else 0,
+                    # Progreso específico según el tema del nivel (100% por nivel completado)
+                    "oceanos_limpiados": 100 if level_id == 1 else 0,
+                    "ozono_restaurado": 100 if level_id == 2 else 0,
+                    "aire_purificado": 100 if level_id == 3 else 0,
+                    "bosques_replantados": 100 if level_id == 4 else 0,
+                    "ciudades_enfriadas": 100 if level_id == 5 else 0,
                 },
                 "stats": {
                     "games_played": 1,
@@ -1005,7 +1005,9 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     Returns:
         dict con resultados del juego
     """
-    save_system = GameSaveSystem()
+    # Usar el save_system que se pasa como parámetro, o crear uno nuevo si no se proporciona
+    if save_system is None:
+        save_system = GameSaveSystem()
 
     profiles = save_system.get_all_profiles()
     if profiles:
@@ -1620,10 +1622,40 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
         # Maintain consistent frame rate
         clock.tick(FPS)
     
+        # Guardar progreso si el jugador ganó y hay configuración de nivel
+    if save_system and game_over and winner == "player" and level_config and 'level_id' in level_config:
+        try:
+            level_id = level_config['level_id']
+            
+            # Crear datos del nivel completado usando el formato correcto
+            progress_data = {
+                "points": player_score * 100,  # Puntos basados en el puntaje
+                "level_completed": level_id,
+                "enemy_defeated": level_config.get('enemy', 'IA'),
+                "planetary_progress": {
+                    # Progreso específico según el tema del nivel (100% por nivel completado)
+                    "oceanos_limpiados": 100 if level_id == 1 else 0,
+                    "ozono_restaurado": 100 if level_id == 2 else 0,
+                    "aire_purificado": 100 if level_id == 3 else 0,
+                    "bosques_replantados": 100 if level_id == 4 else 0,
+                    "ciudades_enfriadas": 100 if level_id == 5 else 0,
+                },
+                "stats": {
+                    "games_played": 1,
+                    "wins": 1,
+                    "losses": 0,
+                    "time_played": 300  # Aprox 5 minutos por partida
+                }
+            }
+            save_system.update_game_progress(progress_data)
+            print(f"✓ Progreso guardado para nivel {level_id} desde main_with_config")
+        except Exception as e:
+            print(f"Error guardando progreso desde main_with_config: {e}")
+    
     # Return game result
     return {
         'victory': winner == "player" if game_over else False,
         'player_score': player_score,
         'ai_score': ai_score,
-        'level_id': level_config.get('id') if level_config else None
+        'level_id': level_config.get('level_id') if level_config else None
     }

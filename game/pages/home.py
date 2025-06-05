@@ -733,7 +733,7 @@ class HockeyMainScreen:
             return
         
         panel_width = 300 if not self.is_mobile else self.screen_width - 40
-        panel_height = 250 if not self.is_mobile else 200
+        panel_height = 300 if not self.is_mobile else 200
         panel_x = 20 if not self.is_mobile else 20
         panel_y = self.screen_height // 2 - 50 if not self.is_mobile else self.screen_height // 2 + 50
         
@@ -755,7 +755,7 @@ class HockeyMainScreen:
         
         # Descripción de la situación
         situation_text = [
-            "La Tierra agoniza. Los polos se derriten,",
+            "La Tierra agoniza, los polos se derriten,",
             "los bosques desaparecen y las ciudades",
             "arden bajo olas de calor implacables.",
             "",
@@ -763,13 +763,17 @@ class HockeyMainScreen:
             "han tomado control del clima:",
             "",
             "🌊 SLICKWAVE - Emperador del plástico",
-            "☀️ UVBLADE - Destructor del ozono"
+            "☀️ UVBLADE - Destructor del ozono",
+            "🌪️ SMOGATRON - Señor del smog",
+            "🌱 DEFORESTIX - Perdición de los bosques",
+            "🔥 HEATCORE - Calor abominable",
+
         ]
         
         y_offset = 60
         for line in situation_text:
             if line.strip():
-                color = self.colors['text_gold'] if line.startswith(('🌊', '☀️')) else self.colors['text_white']
+                color = self.colors['text_gold'] if line.startswith(('🌊', '☀️','🌪️','🌱','🔥')) else self.colors['text_white']
                 text_surface = self.font_small.render(line, True, color)
                 self.screen.blit(text_surface, (panel_x + 10, panel_y + y_offset))
             y_offset += 18
@@ -978,7 +982,7 @@ class HockeyMainScreen:
         # Botones de acción - Tamaños reducidos
         button_width = 100  # Ancho reducido
         button_height = 30  # Alto reducido
-        button_y = panel_y + panel_height - 60  # Posición ajustada
+        button_y = panel_y + panel_height - 40  # Posición ajustada
         button_spacing = 10  # Espaciado entre botones
         
         # Botón Nuevo Perfil (más pequeño)
@@ -1001,7 +1005,7 @@ class HockeyMainScreen:
             # Botón Eliminar (texto abreviado a "Elim")
             delete_button = pygame.Rect(load_button.right + button_spacing, button_y, button_width, button_height)
             pygame.draw.rect(self.screen, self.colors['critical_red'], delete_button, border_radius=3)
-            delete_text = self.font_small.render("Elim", True, self.colors['text_white'])
+            delete_text = self.font_small.render("Eliminar", True, self.colors['text_white'])
             delete_text_rect = delete_text.get_rect(center=delete_button.center)
             self.screen.blit(delete_text, delete_text_rect)
             ui_elements['delete_button'] = delete_button
