@@ -352,7 +352,7 @@ def main(use_rl=False, model_path=None):
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
-    prediction_interval = 20  # ms between predictions
+    prediction_interval = 15  # ms between predictions (reducido de 20 para más responsividad)
     
     # Behavioral correction system
     force_vertical_threshold = 80  # Force vertical movement if puck is this far vertically
@@ -367,11 +367,11 @@ def main(use_rl=False, model_path=None):
     
     # Frame skip for AI updates
     frame_count = 0
-    frame_skip = 2
+    frame_skip = 1  # Reducido de 2 para actualizaciones más frecuentes
     
     # Physics time step control
     last_physics_update = time.time()
-    fixed_physics_step = 1/120
+    fixed_physics_step = 1/120  # Ajustado para 120 FPS
     
     # For reset message
     show_reset_message = False
@@ -582,7 +582,7 @@ def main(use_rl=False, model_path=None):
                 
                 # Apply the action with fixed step size
                 prev_position = ai_mallet.position.copy()
-                move_amount = 7
+                move_amount = 9  # Aumentado de 7 para movimiento más rápido
                 
                 if last_action == 0:  # Up
                     ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
@@ -602,15 +602,20 @@ def main(use_rl=False, model_path=None):
             else:
                 # Use simple AI behavior when RL is not active
                 if not use_rl:
-                    ai_mallet.update(puck.position)
+                    ai_mallet.update(puck.position, puck.velocity)
             
-            # Fixed physics time stepping
+            # Fixed physics time stepping - optimizado para 120 FPS
             current_time = time.time()
             elapsed = current_time - last_physics_update
             
-            if elapsed >= fixed_physics_step:
+            # Actualizar física con timestep fijo
+            accumulator = elapsed
+            while accumulator >= fixed_physics_step:
                 puck.update()
-                last_physics_update = current_time
+                accumulator -= fixed_physics_step
+            
+            if accumulator < elapsed:
+                last_physics_update = current_time - accumulator
             
             # Check collisions
             if puck.check_mallet_collision(human_mallet):
@@ -657,9 +662,11 @@ def main(use_rl=False, model_path=None):
         # Draw everything
         table.draw(screen)
         
-        # Draw glows
+        # Draw glows - optimizado para mejor rendimiento
         current_fps = clock.get_fps()
-        if not show_fps or current_fps == 0 or current_fps > 40:
+        # Solo dibujar brillos si FPS es bueno o si no estamos mostrando FPS
+        if not show_fps or current_fps > 50:
+            # Dibujar brillos completos
             draw_glow(screen, (255, 0, 0), human_mallet.position, human_mallet.radius)
             draw_glow(screen, (0, 255, 0), ai_mallet.position, ai_mallet.radius)
             draw_glow(screen, (0, 0, 255), puck.position, puck.radius)
@@ -1070,26 +1077,26 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
-    prediction_interval = 20  # ms between predictions
+    prediction_interval = 15  # ms between predictions (reducido de 20 para más responsividad)
     
     # Behavioral correction system
-    force_vertical_threshold = 80
-    vertical_move_cooldown = 15
-    last_vertical_move = 100
-    force_horizontal_threshold = 120
-    horizontal_move_cooldown = 15
-    last_horizontal_move = 100
-    movement_history = []
-    stuck_in_bottom_counter = 0
-    stuck_in_side_counter = 0
+    force_vertical_threshold = 80  # Force vertical movement if puck is this far vertically
+    vertical_move_cooldown = 15  # Frames between forced vertical moves
+    last_vertical_move = 100  # Time since last vertical move
+    force_horizontal_threshold = 120  # Force horizontal movement if puck is this far horizontally
+    horizontal_move_cooldown = 15  # Frames between forced horizontal moves
+    last_horizontal_move = 100  # Time since last horizontal move
+    movement_history = []  # Track recent actions
+    stuck_in_bottom_counter = 0  # Counter for being stuck in bottom
+    stuck_in_side_counter = 0  # Counter for being stuck in side
     
     # Frame skip for AI updates
     frame_count = 0
-    frame_skip = 2
+    frame_skip = 1  # Reducido de 2 para actualizaciones más frecuentes
     
     # Physics time step control
     last_physics_update = time.time()
-    fixed_physics_step = 1/120
+    fixed_physics_step = 1/120  # Ajustado para 120 FPS
     
     # For reset message
     show_reset_message = False
@@ -1247,7 +1254,7 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                 
                 # Apply the action with fixed step size
                 prev_position = ai_mallet.position.copy()
-                move_amount = 7
+                move_amount = 9  # Aumentado de 7 para movimiento más rápido
                 
                 if last_action == 0:  # Up
                     ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
@@ -1267,15 +1274,20 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
             else:
                 # Use simple AI behavior when RL is not active
                 if not use_rl:
-                    ai_mallet.update(puck.position)
+                    ai_mallet.update(puck.position, puck.velocity)
             
-            # Fixed physics time stepping
+            # Fixed physics time stepping - optimizado para 120 FPS
             current_time = time.time()
             elapsed = current_time - last_physics_update
             
-            if elapsed >= fixed_physics_step:
+            # Actualizar física con timestep fijo
+            accumulator = elapsed
+            while accumulator >= fixed_physics_step:
                 puck.update()
-                last_physics_update = current_time
+                accumulator -= fixed_physics_step
+            
+            if accumulator < elapsed:
+                last_physics_update = current_time - accumulator
             
             # Check collisions
             if puck.check_mallet_collision(human_mallet):
@@ -1322,9 +1334,11 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
         # Draw everything
         table.draw(screen)
         
-        # Draw glows
+        # Draw glows - optimizado para mejor rendimiento
         current_fps = clock.get_fps()
-        if not show_fps or current_fps == 0 or current_fps > 40:
+        # Solo dibujar brillos si FPS es bueno o si no estamos mostrando FPS
+        if not show_fps or current_fps > 50:
+            # Dibujar brillos completos
             draw_glow(screen, (255, 0, 0), human_mallet.position, human_mallet.radius)
             draw_glow(screen, (0, 255, 0), ai_mallet.position, ai_mallet.radius)
             draw_glow(screen, (0, 0, 255), puck.position, puck.radius)
