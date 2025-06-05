@@ -145,55 +145,78 @@ class Puck(pygame.sprite.Sprite):
         # Calcular nueva posición
         new_x = old_x + self.velocity[0]
         new_y = old_y + self.velocity[1]
-          # Verificar colisiones con las paredes y manejar cada eje por separado
+        
+        # Verificar colisiones con las paredes y manejar cada eje por separado
         # Primero colisión horizontal (izquierda/derecha)
         if new_x - self.radius < 0:
             new_x = self.radius
             self.velocity[0] = abs(self.velocity[0]) * COLLISION_ELASTICITY  # Asegurar rebote hacia adentro
+            # Añadir un pequeño impulso para evitar que se pegue a la pared
+            self.velocity[0] += 0.5
         elif new_x + self.radius > current_width:
             new_x = current_width - self.radius
             self.velocity[0] = -abs(self.velocity[0]) * COLLISION_ELASTICITY  # Asegurar rebote hacia adentro
+            # Añadir un pequeño impulso para evitar que se pegue a la pared
+            self.velocity[0] -= 0.5
             
         # Luego colisión vertical (arriba/abajo)
         if new_y - self.radius < 0:
             new_y = self.radius
             self.velocity[1] = abs(self.velocity[1]) * COLLISION_ELASTICITY  # Asegurar rebote hacia adentro
+            # Añadir un pequeño impulso para evitar que se pegue a la pared
+            self.velocity[1] += 0.5
         elif new_y + self.radius > current_height:
             new_y = current_height - self.radius
             self.velocity[1] = -abs(self.velocity[1]) * COLLISION_ELASTICITY  # Asegurar rebote hacia adentro
+            # Añadir un pequeño impulso para evitar que se pegue a la pared
+            self.velocity[1] -= 0.5
         
         # Verificación especial para las esquinas (añadir un rebote más fuerte)
-        corner_radius = self.radius * 1.5  # Radio para detectar proximidad a esquinas
+        corner_radius = self.radius * 2  # Radio para detectar proximidad a esquinas
+        corner_force = 1.5  # Fuerza de repulsión de las esquinas
         
         # Esquina superior izquierda
         if new_x < corner_radius and new_y < corner_radius:
             # Aplicar una fuerza que aleje el puck de la esquina
-            force_direction = normalize_vector([1, 1])
-            force_magnitude = 0.5
-            self.velocity[0] += force_direction[0] * force_magnitude
-            self.velocity[1] += force_direction[1] * force_magnitude
+            corner_distance = math.sqrt(new_x**2 + new_y**2)
+            if corner_distance < corner_radius:
+                force_direction = normalize_vector([new_x, new_y])
+                if force_direction[0] == 0 and force_direction[1] == 0:
+                    force_direction = [1, 1]
+                self.velocity[0] += force_direction[0] * corner_force
+                self.velocity[1] += force_direction[1] * corner_force
             
         # Esquina superior derecha
         elif new_x > current_width - corner_radius and new_y < corner_radius:
-            force_direction = normalize_vector([-1, 1])
-            force_magnitude = 0.5
-            self.velocity[0] += force_direction[0] * force_magnitude
-            self.velocity[1] += force_direction[1] * force_magnitude
+            corner_distance = math.sqrt((current_width - new_x)**2 + new_y**2)
+            if corner_distance < corner_radius:
+                force_direction = normalize_vector([new_x - current_width, new_y])
+                if force_direction[0] == 0 and force_direction[1] == 0:
+                    force_direction = [-1, 1]
+                self.velocity[0] += force_direction[0] * corner_force
+                self.velocity[1] += force_direction[1] * corner_force
             
         # Esquina inferior izquierda
         elif new_x < corner_radius and new_y > current_height - corner_radius:
-            force_direction = normalize_vector([1, -1])
-            force_magnitude = 0.5
-            self.velocity[0] += force_direction[0] * force_magnitude
-            self.velocity[1] += force_direction[1] * force_magnitude
+            corner_distance = math.sqrt(new_x**2 + (current_height - new_y)**2)
+            if corner_distance < corner_radius:
+                force_direction = normalize_vector([new_x, new_y - current_height])
+                if force_direction[0] == 0 and force_direction[1] == 0:
+                    force_direction = [1, -1]
+                self.velocity[0] += force_direction[0] * corner_force
+                self.velocity[1] += force_direction[1] * corner_force
             
         # Esquina inferior derecha
         elif new_x > current_width - corner_radius and new_y > current_height - corner_radius:
-            force_direction = normalize_vector([-1, -1])
-            force_magnitude = 0.5
-            self.velocity[0] += force_direction[0] * force_magnitude
-            self.velocity[1] += force_direction[1] * force_magnitude
-          # Garantía absoluta de que el puck nunca sale del campo de juego
+            corner_distance = math.sqrt((current_width - new_x)**2 + (current_height - new_y)**2)
+            if corner_distance < corner_radius:
+                force_direction = normalize_vector([new_x - current_width, new_y - current_height])
+                if force_direction[0] == 0 and force_direction[1] == 0:
+                    force_direction = [-1, -1]
+                self.velocity[0] += force_direction[0] * corner_force
+                self.velocity[1] += force_direction[1] * corner_force
+        
+        # Garantía absoluta de que el puck nunca sale del campo de juego
         new_x = max(self.radius, min(new_x, current_width - self.radius))
         new_y = max(self.radius, min(new_y, current_height - self.radius))
         
@@ -226,7 +249,7 @@ class Puck(pygame.sprite.Sprite):
         self.rect.center = self.position
         
     def check_mallet_collision(self, mallet):
-        """Verificación avanzada de colisión con un mallet, con prevención de atravesar paredes"""
+        """Verificación avanzada de colisión con un mallet, con físicas mejoradas"""
         # Verificar si la trayectoria del puck intersecta con el mallet
         trajectory_intersects = line_circle_intersection(
             self.prev_position, 
@@ -243,46 +266,84 @@ class Puck(pygame.sprite.Sprite):
             dx = self.position[0] - mallet.position[0]
             dy = self.position[1] - mallet.position[1]
             
-            # Normalizar
-            length = vector_length([dx, dy])
-            if length > 0:
-                dx /= length
-                dy /= length
+            # Calcular distancia
+            distance = vector_length([dx, dy])
+            
+            # Si la distancia es 0, usar un vector aleatorio pequeño
+            if distance == 0:
+                dx = 0.1
+                dy = 0.1
+                distance = vector_length([dx, dy])
+            
+            # Normalizar el vector de colisión
+            collision_normal_x = dx / distance
+            collision_normal_y = dy / distance
+            
+            # Separar los objetos para evitar superposición
+            overlap = (mallet.radius + self.radius) - distance
+            if overlap > 0:
+                # Mover el puck fuera del mallet
+                self.position[0] += collision_normal_x * (overlap + 1)
+                self.position[1] += collision_normal_y * (overlap + 1)
+            
+            # Calcular velocidades relativas
+            relative_velocity_x = self.velocity[0] - mallet.velocity[0]
+            relative_velocity_y = self.velocity[1] - mallet.velocity[1]
+            
+            # Velocidad relativa en la dirección de la normal
+            velocity_along_normal = (relative_velocity_x * collision_normal_x + 
+                                   relative_velocity_y * collision_normal_y)
+            
+            # No hacer nada si las velocidades se están separando
+            if velocity_along_normal > 0:
+                return False
+            
+            # Calcular el impulso basado en la restitución (elasticidad)
+            restitution = 1.2  # Un poco más que elástico para hacer el juego más dinámico
+            impulse = 2 * velocity_along_normal / (1 + 0.5)  # Asumiendo que el mallet tiene más masa
+            
+            # Aplicar el impulso al puck
+            self.velocity[0] -= impulse * collision_normal_x * restitution
+            self.velocity[1] -= impulse * collision_normal_y * restitution
+            
+            # Añadir la velocidad del mallet para transferencia de momento
+            mallet_influence = 0.3  # Qué tanto afecta la velocidad del mallet
+            self.velocity[0] += mallet.velocity[0] * mallet_influence
+            self.velocity[1] += mallet.velocity[1] * mallet_influence
+            
+            # Verificar si estamos cerca de un borde y ajustar para evitar que el puck salga
+            current_width, current_height = get_screen_dimensions()
+            margin = 30
+            
+            if self.position[0] - self.radius < margin:
+                self.velocity[0] = abs(self.velocity[0])  # Forzar hacia la derecha
+            elif self.position[0] + self.radius > current_width - margin:
+                self.velocity[0] = -abs(self.velocity[0])  # Forzar hacia la izquierda
                 
-                # Verificar si estamos cerca de un borde para ajustar el vector de rebote
-                near_left = self.position[0] - self.radius < 20
-                near_right = self.position[0] + self.radius > WIDTH - 20
-                near_top = self.position[1] - self.radius < 20
-                near_bottom = self.position[1] + self.radius > HEIGHT - 20
-                
-                # Modificar el vector de rebote para evitar empujar contra los bordes
-                if near_left:
-                    dx = abs(dx)  # Forzar componente x positivo (hacia la derecha)
-                elif near_right:
-                    dx = -abs(dx)  # Forzar componente x negativo (hacia la izquierda)
-                    
-                if near_top:
-                    dy = abs(dy)  # Forzar componente y positivo (hacia abajo)
-                elif near_bottom:
-                    dy = -abs(dy)  # Forzar componente y negativo (hacia arriba)
-                
-                # Reposicionar el puck fuera del mallet
-                self.position[0] = mallet.position[0] + (mallet.radius + self.radius + 1) * dx
-                self.position[1] = mallet.position[1] + (mallet.radius + self.radius + 1) * dy
-                
-                # Garantía absoluta de que el puck no salga del área jugable
-                self.position[0] = max(self.radius, min(self.position[0], WIDTH - self.radius))
-                self.position[1] = max(self.radius, min(self.position[1], HEIGHT - self.radius))
-                
-                # Transferir parte de la velocidad del mallet al puck
-                mallet_speed_contribution = vector_length(mallet.velocity) * 0.5
-                
-                # Calcular la nueva velocidad del puck
-                # Combina la reflexión con la velocidad del mallet
-                self.velocity[0] = dx * (6 + mallet_speed_contribution)
-                self.velocity[1] = dy * (6 + mallet_speed_contribution)
-                
-                self.rect.center = self.position
-                return True
+            if self.position[1] - self.radius < margin:
+                self.velocity[1] = abs(self.velocity[1])  # Forzar hacia abajo
+            elif self.position[1] + self.radius > current_height - margin:
+                self.velocity[1] = -abs(self.velocity[1])  # Forzar hacia arriba
+            
+            # Limitar la velocidad máxima después de la colisión
+            speed = vector_length(self.velocity)
+            if speed > self.max_speed:
+                normalized = normalize_vector(self.velocity)
+                self.velocity[0] = normalized[0] * self.max_speed
+                self.velocity[1] = normalized[1] * self.max_speed
+            
+            # Velocidad mínima para evitar que el puck se detenga
+            min_speed = 2.0
+            if speed < min_speed and speed > 0:
+                normalized = normalize_vector(self.velocity)
+                self.velocity[0] = normalized[0] * min_speed
+                self.velocity[1] = normalized[1] * min_speed
+            
+            # Garantía absoluta de que el puck no salga del área jugable
+            self.position[0] = max(self.radius, min(self.position[0], current_width - self.radius))
+            self.position[1] = max(self.radius, min(self.position[1], current_height - self.radius))
+            
+            self.rect.center = self.position
+            return True
                 
         return False

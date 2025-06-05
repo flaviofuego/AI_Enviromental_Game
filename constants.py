@@ -48,7 +48,7 @@ def get_scale_factors():
 
 # Dimensiones actuales (se pueden actualizar dinámicamente)
 WIDTH, HEIGHT = DEFAULT_WIDTH, DEFAULT_HEIGHT
-FPS = 120
+FPS = 60
 
 # Colores
 WHITE = (255, 255, 255)

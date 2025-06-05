@@ -803,8 +803,7 @@ if __name__ == "__main__":
         models = []
         
         fixed_models = [
-            "improved_models/fixed_air_hockey_final.zip",
-            "improved_models/quick_fixed_model_final.zip"
+            "improved_models/quick_fixed_model_final.zip",
         ]
         for model_path in fixed_models:
             if os.path.exists(model_path):
@@ -883,7 +882,7 @@ def start_game_with_level(level_id, save_system=None, screen=None):
             'enemy': "SLICKWAVE",
             'theme': "Plástico",
             'difficulty': 'easy',
-            'model_preference': 'improved',
+            'model_preference': 'fixed',#cambiar a improved
             'background_color': (173, 216, 230)  # Azul hielo
         },
         2: {
@@ -929,21 +928,25 @@ def start_game_with_level(level_id, save_system=None, screen=None):
     model_path = None
     if config['model_preference'] == 'fixed':
         # Niveles difíciles usan modelos con correcciones
-        for path in ["improved_models/fixed_air_hockey_final.zip", "improved_models/quick_fixed_model_final.zip"]:
+        for path in ["improved_models/quick_fixed_model_final.zip","improved_models/fixed_air_hockey_final.zip" ]:
             if os.path.exists(path):
                 model_path = path
+                print(f"Using model: {model_path}") 
                 break
     elif config['model_preference'] == 'enhanced':
         # Niveles medios usan modelos mejorados
         for path in ["improved_models/quick_enhanced_model_final.zip", "improved_models/enhanced_vertical_model_final.zip"]:
             if os.path.exists(path):
                 model_path = path
+                print(f"Using model: {model_path}") 
+                
                 break
     else:  # improved
         # Niveles fáciles usan modelos legacy mejorados
-        for path in ["improved_models/improved_air_hockey_final.zip", "improved_models/quick_model_final.zip"]:
+        for path in ["improved_models/quick_model_final.zip"]:
             if os.path.exists(path):
                 model_path = path
+                print(f"Using model: {model_path}") 
                 break
     
     # Configurar ventana si no se proporciona
