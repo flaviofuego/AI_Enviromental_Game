@@ -3,7 +3,7 @@ import os
 
 # Dimensiones
 WIDTH, HEIGHT = 800, 500
-FPS = 60
+FPS = 120
 
 # Colores
 WHITE = (255, 255, 255)
