@@ -65,11 +65,10 @@ class Mallet(pygame.sprite.Sprite):
             ]
 
 class HumanMallet(Mallet):
-    """Mallet controlado por el jugador humano"""
-    
-    def __init__(self, custom_image=None):
+    def __init__(self, color=NEON_RED, custom_image=None):
         current_width, current_height = get_screen_dimensions()
-        super().__init__(current_width // 4, current_height // 2, NEON_RED, custom_image)
+        super().__init__(current_width // 4, current_height // 2, color, custom_image)
+
 
 class AIMallet(Mallet):
     """Mallet controlado por la IA simple"""

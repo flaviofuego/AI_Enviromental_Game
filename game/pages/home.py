@@ -1167,8 +1167,8 @@ class HockeyMainScreen:
             self.screen.blit(subtitle, subtitle_rect)
         
         current_skin_id = getattr(self, 'selected_skin_id', 'default')
-        if 0 <= self.selected_profile_index < len(self.profiles):
-            current_skin_id = self.profiles[self.selected_profile_index].get('skin', current_skin_id)
+        if self.save_system.current_profile:
+            current_skin_id = self.save_system.current_profile.get("skin", current_skin_id)
         
         # Área de vista previa (derecha)
         preview_width = 250
@@ -1304,7 +1304,8 @@ class HockeyMainScreen:
                     return self.draw_skin_selection_screen()
             
             # Verificar botón volver
-            if ui_elements['back_button'].collidepoint(event.pos):           
+            if ui_elements['back_button'].collidepoint(event.pos): 
+                print(self.save_system.get_last_used_profile())          
                 self.current_screen = "profiles"
         
         elif event.type == pygame.KEYDOWN:

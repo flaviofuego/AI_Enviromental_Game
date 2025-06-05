@@ -988,6 +988,9 @@ def draw_round_button(screen, color, center, radius, text, font_size=36):
     screen.blit(text_surface, text_rect)
     return pygame.Rect(center[0]-radius, center[1]-radius, radius*2, radius*2)
 
+from game.config.save_system import GameSaveSystem
+
+
 def main_with_config(use_rl=False, model_path=None, screen=None, level_config=None, save_system=None):
     """
     Función principal del juego con configuración específica de nivel
@@ -1002,6 +1005,29 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     Returns:
         dict con resultados del juego
     """
+    save_system = GameSaveSystem()
+
+    profiles = save_system.get_all_profiles()
+    if profiles:
+        last_profile_id = profiles[0]['profile_id']
+        profile = save_system.load_profile(last_profile_id)
+    else:
+        profile = None
+
+    selected_skin_id = profile.get("skin", "default") if profile else "default"
+
+    skin_colors = {
+        'default': (200, 200, 200),
+        'eco_warrior': (100, 200, 100),
+        'arctic': (150, 220, 255),
+        'volcano': (255, 100, 50),
+        'cyber': (100, 255, 200),
+        'retro': (255, 200, 100),
+        'scientist': (200, 200, 255),
+        'agent': (50, 50, 100),
+    }
+
+    mallet_color = skin_colors.get(selected_skin_id, (200, 200, 200))
     
     if screen is None:
         pygame.init()
@@ -1046,9 +1072,8 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     # Crear sprites con imágenes personalizadas
     puck_image = custom_sprites.get('puck', None)
     puck = Puck(custom_image=puck_image)
-    
-    player_mallet_image = custom_sprites.get('mallet_player', None)
-    human_mallet = HumanMallet(custom_image=player_mallet_image)
+
+    human_mallet = HumanMallet(color=mallet_color)    
     
     ai_mallet_image = custom_sprites.get('mallet_ai', None)
     ai_reaction_speed = level_config.get('ai_reaction_speed', None) if level_config else None
