@@ -665,11 +665,28 @@ class LevelSelectScreen:
                     # Guardar progreso del nivel si ganó
                     if self.save_system:
                         try:
-                            self.save_system.save_level_progress(level_id, {
-                                'completed': True,
-                                'player_score': result.get('player_score', 0),
-                                'ai_score': result.get('ai_score', 0)
-                            })
+                            # Crear datos del nivel completado usando el formato correcto
+                            progress_data = {
+                                "points": result.get('player_score', 0) * 100,  # Puntos basados en el puntaje
+                                "level_completed": level_id,
+                                "enemy_defeated": level_data.get('enemy', 'IA'),
+                                "planetary_progress": {
+                                    # Progreso específico según el tema del nivel
+                                    "oceanos_limpiados": 1 if level_id == 1 else 0,
+                                    "ozono_restaurado": 1 if level_id == 2 else 0,
+                                    "aire_purificado": 1 if level_id == 3 else 0,
+                                    "bosques_replantados": 1 if level_id == 4 else 0,
+                                    "ciudades_enfriadas": 1 if level_id == 5 else 0,
+                                },
+                                "stats": {
+                                    "games_played": 1,
+                                    "wins": 1,
+                                    "losses": 0,
+                                    "time_played": 300  # Aprox 5 minutos por partida
+                                }
+                            }
+                            self.save_system.update_game_progress(progress_data)
+                            print(f"✓ Progreso guardado para nivel {level_id}")
                         except Exception as e:
                             print(f"Error guardando progreso: {e}")
                 else:
