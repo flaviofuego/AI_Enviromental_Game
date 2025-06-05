@@ -635,11 +635,11 @@ def create_settings_popup(screen, audio_manager):
     slider_x = (popup.width - slider_width) // 2
     
     # Slider para música - ajustar posición vertical según contenido
-    music_y = 90  # Posición aproximada debajo del texto "Volumen de Música:"
+    music_y = 150  # Posición aproximada debajo del texto "Volumen de Música:"
     popup.add_slider(slider_x, music_y, slider_width, 10, 0.0, 1.0, music_volume, "music_volume")
     
     # Slider para efectos - ajustar posición vertical según contenido
-    sfx_y = 150  # Posición aproximada debajo del texto "Volumen de Efectos:"
+    sfx_y = 230  # Posición aproximada debajo del texto "Volumen de Efectos:"
     popup.add_slider(slider_x, sfx_y, slider_width, 10, 0.0, 1.0, sfx_volume, "sfx_volume")
     
     return popup

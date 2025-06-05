@@ -1182,9 +1182,6 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                             paused = not paused
                             if paused:
                                 resume_target_pos = (human_mallet.position[0], human_mallet.position[1])
-                        else:
-                            waiting_for_resume_click = False
-                            paused = True
                 elif event.key == pygame.K_f:
                     show_fps = not show_fps
                 elif event.key == pygame.K_r and not game_over:
@@ -1429,7 +1426,7 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
             if waiting_for_resume_click:
                 confirm_font = pygame.font.Font(None, 36)
                 confirm_text = confirm_font.render("Haz click cerca de tu mazo para reanudar", True, WHITE)
-                confirm_rect = confirm_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 100))
+                confirm_rect = confirm_text.get_rect(center=(current_width // 2, current_height // 2 - 100))
                 screen.blit(confirm_text, confirm_rect)
                 
                 # Dibujar área objetivo
@@ -1583,7 +1580,7 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
         
         screen.blit(mode_text, (current_width // 2 - mode_text.get_width() // 2, current_height - 50))
         
-        controls_text = font.render("F: FPS | R: Reset | ESC: Salir", True, WHITE)
+        controls_text = font.render("F: FPS | ESC: Pausar", True, WHITE)
         screen.blit(controls_text, (10, current_height - 30))
         
         # Show reset message if active
