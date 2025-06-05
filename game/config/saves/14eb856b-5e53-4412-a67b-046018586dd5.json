@@ -2,8 +2,8 @@
   "profile_id": "14eb856b-5e53-4412-a67b-046018586dd5",
   "player_name": "prueba1",
   "created_date": "2025-05-30T21:00:55.585682",
-  "last_played": "2025-06-05T03:55:46.301336",
-  "total_points": 5600,
+  "last_played": "2025-06-05T04:23:30.733017",
+  "total_points": 6300,
   "planetary_progress": {
     "oceanos_limpiados": 100,
     "ozono_restaurado": 100,
@@ -13,7 +13,7 @@
   },
   "levels": {
     "unlocked": 6,
-    "current": 2,
+    "current": 6,
     "completed": [
       1,
       2,
@@ -37,10 +37,10 @@
     "difficulty": "normal"
   },
   "stats": {
-    "games_played": 8,
-    "wins": 8,
+    "games_played": 9,
+    "wins": 9,
     "losses": 0,
-    "time_played": 2400
+    "time_played": 2700
   },
   "skin": "retro"
 }
