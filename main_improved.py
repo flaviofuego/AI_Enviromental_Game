@@ -1127,7 +1127,7 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
-    prediction_interval = 20  # ms between predictions
+    prediction_interval = 10  # ms between predictions
     
     # Behavioral correction system
     force_vertical_threshold = 80  # Force vertical movement if puck is this far vertically
@@ -1146,7 +1146,7 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     
     # Physics time step control
     last_physics_update = time.time()
-    fixed_physics_step = 1/120  # Ajustado para 120 FPS
+    fixed_physics_step = 1/FPS  # Ajustado para 120 FPS
     
     # For reset message
     show_reset_message = False
@@ -1358,7 +1358,7 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                 
                 # Apply the action with fixed step size
                 prev_position = ai_mallet.position.copy()
-                move_amount = 9  # Velocidad de movimiento aumentada
+                move_amount = ai_move_speed  # Velocidad de movimiento aumentada
                 
                 if last_action == 0:  # Up
                     ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)

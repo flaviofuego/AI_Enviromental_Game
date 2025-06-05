@@ -111,7 +111,7 @@ LEVELS = {
         "difficulty": 5,
         "ai_reaction_speed": 0.25,  # IA máxima velocidad
         "ai_prediction_factor": 0.65,  # Predicción experta
-        "ai_move_speed": 9
+        "ai_move_speed": 20
     }
 }
 
