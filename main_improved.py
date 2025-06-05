@@ -9,8 +9,8 @@ import time
 
 # Performance optimization settings
 torch.cuda.is_available = lambda: False
-os.environ['OMP_NUM_THREADS'] = '4'
-torch.set_num_threads(4)
+os.environ['OMP_NUM_THREADS'] = '6'
+torch.set_num_threads(6)
 
 # Try importing PPO first (for newer models), fall back to DQN if not available
 try:
@@ -1127,18 +1127,23 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     # RL prediction management
     last_action = 4  # Default to "stay" action
     last_prediction_time = 0
-    prediction_interval = 15  # ms between predictions (reducido de 20 para más responsividad)
+    prediction_interval = 8  # ms between predictions (máxima responsividad)
     
-    # Behavioral correction system (optimizado y menos agresivo)
-    force_vertical_threshold = 120  # Aumentado para ser menos agresivo 
-    vertical_move_cooldown = 25  # Más tiempo entre correcciones
+    # Behavioral correction system (sistema mejorado anti-bloqueo)
+    force_vertical_threshold = 60  # Umbral más sensible para movimiento vertical
+    vertical_move_cooldown = 10  # Cooldown más corto
     last_vertical_move = 100  # Time since last vertical move
-    force_horizontal_threshold = 160  # Aumentado para ser menos agresivo
-    horizontal_move_cooldown = 25  # Más tiempo entre correcciones
+    force_horizontal_threshold = 80  # Umbral más sensible para movimiento horizontal
+    horizontal_move_cooldown = 10  # Cooldown más corto
     last_horizontal_move = 100  # Time since last horizontal move
     movement_history = []  # Track recent actions
     stuck_in_bottom_counter = 0  # Counter for being stuck in bottom
     stuck_in_side_counter = 0  # Counter for being stuck in side
+    
+    # Sistema anti-bloqueo mejorado
+    ai_position_history = []  # Historial de posiciones de la IA
+    last_significant_move = 0  # Tiempo desde el último movimiento significativo
+    emergency_mode_counter = 0  # Contador para modo de emergencia
     
     # Frame skip for AI updates
     frame_count = 0
@@ -1229,25 +1234,52 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                         else:
                             action = int(action)
                         
-                        # BEHAVIORAL CORRECTION SYSTEM
+                        # SISTEMA DE CORRECCIÓN COMPORTAMENTAL MEJORADO
                         last_vertical_move += 1
                         last_horizontal_move += 1
+                        last_significant_move += 1
                         movement_history.append(action)
                         if len(movement_history) > 20:
                             movement_history.pop(0)
-                          # Check if AI is stuck in the bottom of the field
+                        
+                        # Registrar posición de la IA para detectar bloqueos
+                        ai_position_history.append((ai_mallet.position[0], ai_mallet.position[1]))
+                        if len(ai_position_history) > 30:  # Mantener últimos 30 frames
+                            ai_position_history.pop(0)
+                        
+                        # Detectar si la IA está completamente bloqueada (no se mueve significativamente)
+                        ai_is_stuck = False
+                        if len(ai_position_history) >= 20:
+                            # Calcular variación de posición en los últimos frames
+                            recent_positions = ai_position_history[-20:]
+                            x_positions = [pos[0] for pos in recent_positions]
+                            y_positions = [pos[1] for pos in recent_positions]
+                            
+                            x_range = max(x_positions) - min(x_positions)
+                            y_range = max(y_positions) - min(y_positions)
+                            
+                            # Si la IA se ha movido muy poco en los últimos 20 frames
+                            if x_range < 15 and y_range < 15:
+                                ai_is_stuck = True
+                                emergency_mode_counter += 1
+                            else:
+                                emergency_mode_counter = 0
+                                last_significant_move = 0
+                        
+                        # Check if AI is stuck in specific areas
                         if ai_mallet.position[1] > current_height * 0.75:
                             stuck_in_bottom_counter += 1
                         else:
                             stuck_in_bottom_counter = 0
                         
-                        # Check if AI is stuck on the sides
                         if (ai_mallet.position[0] > current_width * 0.85 or
                             ai_mallet.position[0] < current_width * 0.55):
                             stuck_in_side_counter += 1
                         else:
                             stuck_in_side_counter = 0
-                          # Calculate distances and game state
+                        
+                        # Calculate distances and game state
+                        original_action = action
                         y_distance = abs(puck.position[1] - ai_mallet.position[1])
                         x_distance = abs(puck.position[0] - ai_mallet.position[0])
                         puck_in_ai_half = puck.position[0] > current_width // 2
@@ -1256,45 +1288,85 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                         recent_vertical = sum(1 for a in movement_history[-10:] if a in [0, 1]) if len(movement_history) >= 10 else 0
                         recent_horizontal = sum(1 for a in movement_history[-10:] if a in [2, 3]) if len(movement_history) >= 10 else 0
                         
-                        # Force movement conditions
-                        force_vertical = False
-                        force_horizontal = False
-                        reason = ""
-                        
-                        # CORRECCIONES SIMPLIFICADAS Y MENOS AGRESIVAS
-                        # Solo corregir cuando realmente está atascado y el puck está cerca
-                        if (y_distance > force_vertical_threshold and 
-                            last_vertical_move > vertical_move_cooldown and 
-                            puck_in_ai_half and recent_vertical == 0):
-                            force_vertical = True
-                            reason = "puck_far_vertical"
-                        elif stuck_in_bottom_counter > 8:  # Más tolerante
-                            force_vertical = True
-                            reason = "stuck_in_bottom"
-                        
-                        # HORIZONTAL MOVEMENT FORCING (solo si no está forzando vertical)
-                        if (not force_vertical and x_distance > force_horizontal_threshold and 
-                            last_horizontal_move > horizontal_move_cooldown and 
-                            puck_in_ai_half and recent_horizontal == 0):
-                            force_horizontal = True
-                            reason = "puck_far_horizontal"
-                        elif (not force_vertical and stuck_in_side_counter > 8):  # Más tolerante
-                            force_horizontal = True
-                            reason = "stuck_in_side"
-                        
-                        # Apply forced movements (vertical has priority)
-                        if force_vertical:
-                            if puck.position[1] < ai_mallet.position[1]:
-                                action = 0  # Up
+                        # MODO DE EMERGENCIA: IA completamente bloqueada
+                        if emergency_mode_counter > 15 or (ai_is_stuck and puck_in_ai_half):
+                            # Forzar movimiento drástico hacia el puck
+                            if abs(puck.position[1] - ai_mallet.position[1]) > abs(puck.position[0] - ai_mallet.position[0]):
+                                # Priorizar movimiento vertical
+                                action = 0 if puck.position[1] < ai_mallet.position[1] else 1
                             else:
-                                action = 1  # Down
+                                # Priorizar movimiento horizontal
+                                action = 2 if puck.position[0] < ai_mallet.position[0] else 3
+                            
+                            # Reset counters
+                            emergency_mode_counter = 0
+                            last_significant_move = 0
                             last_vertical_move = 0
-                        elif force_horizontal:
-                            if puck.position[0] > ai_mallet.position[0]:
-                                action = 3  # Right
-                            else:
-                                action = 2  # Left
                             last_horizontal_move = 0
+                            
+                            if show_fps:
+                                print(f"🚨 MODO EMERGENCIA: IA bloqueada, forzando acción {action}")
+                        
+                        else:
+                            # CORRECCIONES NORMALES (más sensibles)
+                            force_vertical = False
+                            force_horizontal = False
+                            reason = ""
+                            
+                            # VERTICAL MOVEMENT FORCING (más agresivo)
+                            if (y_distance > force_vertical_threshold and 
+                                last_vertical_move > vertical_move_cooldown and 
+                                puck_in_ai_half and recent_vertical < 3):
+                                force_vertical = True
+                                reason = "puck_far_vertical"
+                            
+                            elif stuck_in_bottom_counter > 3 and recent_vertical == 0:
+                                force_vertical = True
+                                reason = "stuck_in_bottom"
+                            
+                            elif (len(movement_history) >= 12 and recent_vertical == 0 and 
+                                  puck_in_ai_half and y_distance > 30):
+                                force_vertical = True
+                                reason = "no_recent_vertical"
+                            
+                            # HORIZONTAL MOVEMENT FORCING (más agresivo)
+                            if (not force_vertical and x_distance > force_horizontal_threshold and 
+                                last_horizontal_move > horizontal_move_cooldown and 
+                                puck_in_ai_half and recent_horizontal < 3):
+                                force_horizontal = True
+                                reason = "puck_far_horizontal"
+                            
+                            elif (not force_vertical and stuck_in_side_counter > 3 and recent_horizontal == 0):
+                                force_horizontal = True
+                                reason = "stuck_in_side"
+                            
+                            elif (not force_vertical and len(movement_history) >= 12 and recent_horizontal == 0 and 
+                                  puck_in_ai_half and x_distance > 40):
+                                force_horizontal = True
+                                reason = "no_recent_horizontal"
+                            
+                            # Aplicar correcciones
+                            if force_vertical:
+                                if puck.position[1] < ai_mallet.position[1]:
+                                    action = 0  # Up
+                                else:
+                                    action = 1  # Down
+                                last_vertical_move = 0
+                                last_significant_move = 0
+                                
+                                if show_fps:
+                                    print(f"Forced vertical movement: {action} (reason: {reason})")
+                            
+                            elif force_horizontal:
+                                if puck.position[0] > ai_mallet.position[0]:
+                                    action = 3  # Right
+                                else:
+                                    action = 2  # Left
+                                last_horizontal_move = 0
+                                last_significant_move = 0
+                                
+                                if show_fps:
+                                    print(f"Forced horizontal movement: {action} (reason: {reason})")
                         
                         last_action = action
                     except Exception as e:
@@ -1302,9 +1374,9 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                     
                     last_prediction_time = current_time
                 
-                # Apply the action with dynamic step size based on level
+                # Apply the action with fixed step size
                 prev_position = ai_mallet.position.copy()
-                move_amount = ai_move_speed  # Usar velocidad de movimiento del nivel
+                move_amount = 7  # Velocidad de movimiento balanceada
                 
                 if last_action == 0:  # Up
                     ai_mallet.position[1] = max(ai_mallet.position[1] - move_amount, ai_mallet.radius)
