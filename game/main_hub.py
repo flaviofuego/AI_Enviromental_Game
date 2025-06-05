@@ -189,8 +189,7 @@ if __name__ == "__main__":
             
             # Ejecutar pantalla principal y obtener siguiente acción
             result = main_screen.run()
-            
-            # Procesar resultado de la pantalla principal
+              # Procesar resultado de la pantalla principal
             if result == "exit":
                 exit_game = True
             elif result == "level_select":
@@ -213,13 +212,7 @@ if __name__ == "__main__":
             elif result == "back_to_menu":
                 transition_effect(screen, fade_out=True)
                 current_screen = "home"
-            elif result and result.startswith("start_level_"):
-                # Aquí implementarías la carga del nivel específico
-                level_id = int(result.split("_")[-1])
-                print(f"Iniciando nivel {level_id}")
-                # Por ahora, volvemos al menú principal
-                transition_effect(screen, fade_out=True)
-                current_screen = "home"
+            # Ya no necesitamos manejar start_level_ porque Level_Select lo maneja internamente
     
     # Finalizar Pygame al salir
     pygame.quit()
