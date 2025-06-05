@@ -19,6 +19,11 @@ class SpriteLoader:
             pygame.Surface con la imagen cargada y escalada
         """
         try:
+            # Verificar que el archivo existe
+            if not os.path.exists(image_path):
+                print(f"Archivo no existe: {image_path}")
+                return None
+                
             # Cargar imagen
             image = pygame.image.load(image_path).convert_alpha()
             
@@ -44,7 +49,10 @@ class SpriteLoader:
                 return pygame.transform.smoothscale(image, target_size)
                 
         except pygame.error as e:
-            print(f"Error cargando sprite {image_path}: {e}")
+            print(f"Error pygame cargando sprite {image_path}: {e}")
+            return None
+        except Exception as e:
+            print(f"Error general cargando sprite {image_path}: {e}")
             return None
     
     @staticmethod
@@ -80,34 +88,53 @@ class SpriteLoader:
         scale_x, scale_y = get_scale_factors()
         
         # Cargar fondo
-        bg_path = get_asset_path(level_id, "cancha.png")
+        bg_path = get_asset_path(level_id, "background.png")
         if os.path.exists(bg_path):
             current_width, current_height = get_screen_dimensions()
-            sprites['background'] = SpriteLoader.load_sprite(bg_path, (current_width, current_height), False)
+            background_sprite = SpriteLoader.load_sprite(bg_path, (current_width, current_height), False)
+            if background_sprite is not None:
+                sprites['background'] = background_sprite
+                print(f"✓ Fondo cargado para nivel {level_id}")
+            else:
+                print(f"✗ Error cargando fondo para nivel {level_id}")
+        else:
+            print(f"⚠ Fondo no encontrado para nivel {level_id}, usando color sólido")
         
         # Cargar puck
         puck_path = get_asset_path(level_id, "puck.png")
         if os.path.exists(puck_path):
             puck_size = int(30 * min(scale_x, scale_y))  # Diámetro del puck
-            sprites['puck'] = SpriteLoader.load_sprite(puck_path, (puck_size, puck_size))
+            puck_sprite = SpriteLoader.load_sprite(puck_path, (puck_size, puck_size))
+            if puck_sprite is not None:
+                sprites['puck'] = puck_sprite
+                print(f"✓ Sprites personalizados cargados para nivel {level_id}")
+            else:
+                print(f"⚠ Usando puck por defecto para nivel {level_id}")
+        else:
+            print(f"⚠ Usando sprites por defecto para nivel {level_id}")
         
         # Cargar mallet IA
         mallet_path = get_asset_path(level_id, "mallet_IA.png")
         if os.path.exists(mallet_path):
             mallet_size = int(64 * min(scale_x, scale_y))  # Diámetro del mallet
-            sprites['mallet_ai'] = SpriteLoader.load_sprite(mallet_path, (mallet_size, mallet_size))
-            # Crear versión para el jugador (con tinte diferente)
-            sprites['mallet_player'] = sprites['mallet_ai'].copy()
+            mallet_sprite = SpriteLoader.load_sprite(mallet_path, (mallet_size, mallet_size))
+            if mallet_sprite is not None:
+                sprites['mallet_ai'] = mallet_sprite
+                # Crear versión para el jugador (con tinte diferente)
+                sprites['mallet_player'] = mallet_sprite.copy()
         
         # Cargar porterías
         goal_left_path = get_asset_path(level_id, "porteria_izq.png")
         if os.path.exists(goal_left_path):
-            sprites['goal_left'] = SpriteLoader.load_sprite(goal_left_path)
+            goal_left_sprite = SpriteLoader.load_sprite(goal_left_path)
+            if goal_left_sprite is not None:
+                sprites['goal_left'] = goal_left_sprite
         
         goal_right_path = get_asset_path(level_id, "porteria_der.png")
         if os.path.exists(goal_right_path):
-            sprites['goal_right'] = SpriteLoader.load_sprite(goal_right_path)
-        
+            goal_right_sprite = SpriteLoader.load_sprite(goal_right_path)
+            if goal_right_sprite is not None:
+                sprites['goal_right'] = goal_right_sprite
         return sprites
     
     @staticmethod

@@ -7,7 +7,7 @@ LEVELS = {
         "name": "Arctic Meltdown",
         "description": "El hielo ártico se derrite rápidamente. ¡Juega para salvarlo!",
         "theme": {
-            "background": "cancha.png",
+            "background": "background.png",
             "mallet_ai": "mallet_IA.png",
             "mallet_player": "mallet_IA.png",  # Usará el mismo pero con diferente tinte
             "puck": "puck.png",
@@ -21,14 +21,14 @@ LEVELS = {
             }
         },
         "difficulty": 1,
-        "ai_reaction_speed": 0.08,  # IA más lenta
-        "ai_prediction_factor": 0.2
+        "ai_reaction_speed": 0.28,  # IA más lenta
+        "ai_prediction_factor": 0.5
     },
     2: {
         "name": "Forest Guardian",
         "description": "Los bosques están en peligro. ¡Defiéndelos!",
         "theme": {
-            "background": "cancha.png",
+            "background": "background.png",
             "mallet_ai": "mallet_IA.png",
             "mallet_player": "mallet_IA.png",
             "puck": "puck.png",
@@ -49,7 +49,7 @@ LEVELS = {
         "name": "Ocean Defense",
         "description": "Los océanos sufren contaminación. ¡Protégelos!",
         "theme": {
-            "background": "cancha.png",
+            "background": "background.png",
             "mallet_ai": "mallet_IA.png",
             "mallet_player": "mallet_IA.png",
             "puck": "puck.png",
@@ -70,7 +70,7 @@ LEVELS = {
         "name": "City Heat Island",
         "description": "Las ciudades se sobrecalientan. ¡Enfríalas!",
         "theme": {
-            "background": "cancha.png",
+            "background": "background.png",
             "mallet_ai": "mallet_IA.png",
             "mallet_player": "mallet_IA.png",
             "puck": "puck.png",
@@ -91,7 +91,7 @@ LEVELS = {
         "name": "Final Stand",
         "description": "¡El destino del planeta está en tus manos!",
         "theme": {
-            "background": "cancha.png",
+            "background": "background.png",
             "mallet_ai": "mallet_IA.png",
             "mallet_player": "mallet_IA.png",
             "puck": "puck.png",

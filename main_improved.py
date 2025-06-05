@@ -625,13 +625,14 @@ def main(level_id=None, debug_mode=True, use_rl=True):
         
         # Draw everything
         # Dibujar fondo personalizado si está disponible
-        if 'background' in custom_sprites and custom_sprites['background'] is not None:
+        has_custom_background = 'background' in custom_sprites and custom_sprites['background'] is not None
+        if has_custom_background:
             screen.blit(custom_sprites['background'], (0, 0))
+            # No dibujar fondo sólido en la mesa porque ya tenemos fondo personalizado
+            table.draw(screen, draw_background=False)
         else:
-            # Si no hay fondo personalizado, usar el color de la mesa
-            screen.fill(table.table_color)
-        
-        table.draw(screen)
+            # Si no hay fondo personalizado, dejar que la mesa dibuje su fondo
+            table.draw(screen, draw_background=True)
         
         # Draw glows - optimizado para mejor rendimiento
         current_fps = clock.get_fps()
@@ -1048,7 +1049,10 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     
     ai_mallet_image = custom_sprites.get('mallet_ai', None)
     ai_reaction_speed = level_config.get('ai_reaction_speed', None) if level_config else None
+    print(ai_reaction_speed,"esta es la reaccion")
     ai_prediction_factor = level_config.get('ai_prediction_factor', None) if level_config else None
+    print(ai_prediction_factor,"esta es la prediccion")
+    
     ai_mallet = AIMallet(custom_image=ai_mallet_image, 
                         reaction_speed=ai_reaction_speed,
                         prediction_factor=ai_prediction_factor)
@@ -1358,13 +1362,14 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
         
         # Draw everything
         # Dibujar fondo personalizado si está disponible
-        if 'background' in custom_sprites and custom_sprites['background'] is not None:
+        has_custom_background = 'background' in custom_sprites and custom_sprites['background'] is not None
+        if has_custom_background:
             screen.blit(custom_sprites['background'], (0, 0))
+            # No dibujar fondo sólido en la mesa porque ya tenemos fondo personalizado
+            table.draw(screen, draw_background=False)
         else:
-            # Si no hay fondo personalizado, usar el color de la mesa
-            screen.fill(table.table_color)
-        
-        table.draw(screen)
+            # Si no hay fondo personalizado, dejar que la mesa dibuje su fondo
+            table.draw(screen, draw_background=True)
         
         # Draw glows - optimizado para mejor rendimiento
         current_fps = clock.get_fps()
