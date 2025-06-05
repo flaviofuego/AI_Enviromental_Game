@@ -45,6 +45,10 @@ class PopUp:
         # Estado de hover/click
         self.hovered_button = -1
         self.button_rects = []
+
+        # Agregar soporte para elementos interactivos
+        self.interactive_elements = []
+        self.active_element = None
         
         # Fuentes
         try:
@@ -58,6 +62,20 @@ class PopUp:
         
         # Calcular dimensiones
         self.calculate_dimensions()
+
+    def add_slider(self, x, y, width, height, min_value, max_value, current_value, id):
+        """Añadir un slider interactivo"""
+        slider = {
+            "type": "slider",
+            "rect": pygame.Rect(x, y, width, height),
+            "min": min_value,
+            "max": max_value,
+            "value": current_value,
+            "id": id,
+            "dragging": False
+        }
+        self.interactive_elements.append(slider)
+        return slider
     
     def setup_visual_config(self):
         """Configurar colores y estilos según el tipo de pop-up"""
@@ -200,6 +218,50 @@ class PopUp:
         if not self.visible or self.closing:
             return None
         
+        result = None
+        
+        if event.type == pygame.MOUSEMOTION:
+            result = self.handle_mouse_motion(event.pos)
+            # Actualizar sliders si están siendo arrastrados
+            for element in self.interactive_elements:
+                if element["type"] == "slider" and element["dragging"]:
+                    relative_x = max(0, min(event.pos[0] - (self.x + element["rect"].x), element["rect"].width))
+                    element["value"] = element["min"] + (element["max"] - element["min"]) * (relative_x / element["rect"].width)
+                    return {"action": "slider_change", "id": element["id"], "value": element["value"]}
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Click izquierdo
+                # Comprobar si se hizo clic en algún elemento interactivo
+                real_pos = event.pos
+                for element in self.interactive_elements:
+                    # Ajustar la posición del elemento a la pantalla
+                    element_rect = pygame.Rect(self.x + element["rect"].x, 
+                                              self.y + element["rect"].y,
+                                              element["rect"].width, 
+                                              element["rect"].height)
+                    
+                    if element_rect.collidepoint(real_pos):
+                        if element["type"] == "slider":
+                            element["dragging"] = True
+                            relative_x = max(0, min(real_pos[0] - element_rect.x, element_rect.width))
+                            element["value"] = element["min"] + (element["max"] - element["min"]) * (relative_x / element_rect.width)
+                            return {"action": "slider_change", "id": element["id"], "value": element["value"]}
+                
+                # Si no se hizo clic en un elemento interactivo, comprobar botones
+                btn_result = self.handle_click(event.pos)
+                if btn_result:
+                    return btn_result
+            elif event.button == 4:  # Scroll up
+                self.scroll_up()
+            elif event.button == 5:  # Scroll down
+                self.scroll_down()
+        elif event.type == pygame.MOUSEBUTTONUP:
+            # Detener arrastre de elementos
+            for element in self.interactive_elements:
+                if element["type"] == "slider" and element["dragging"]:
+                    element["dragging"] = False
+                    return {"action": "slider_final", "id": element["id"], "value": element["value"]}
+        
+        
         if event.type == pygame.MOUSEMOTION:
             return self.handle_mouse_motion(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -222,7 +284,7 @@ class PopUp:
             elif event.key == pygame.K_DOWN:
                 self.scroll_down()
         
-        return None
+        return result
     
     def handle_mouse_motion(self, pos):
         """Manejar movimiento del mouse para hover effects"""
@@ -328,8 +390,38 @@ class PopUp:
         
         # Contenido (solo si está suficientemente escalado)
         if self.current_scale > 0.3:
+            # Dibujar elementos interactivos
+            for element in self.interactive_elements:
+                if element["type"] == "slider":
+                    # Dibujar slider base
+                    slider_rect = pygame.Rect(element["rect"].x, 
+                                             max(0, element["rect"].y - self.scroll_offset), 
+                                             element["rect"].width, 
+                                             element["rect"].height)
+                    
+                    # Solo dibujar si está visible
+                    if slider_rect.y > -slider_rect.height and slider_rect.y < scaled_height:
+                        # Barra de fondo
+                        pygame.draw.rect(popup_surface, (60, 60, 60), slider_rect, border_radius=3)
+                        
+                        # Barra de valor
+                        value_width = int((element["value"] - element["min"]) / 
+                                         (element["max"] - element["min"]) * element["rect"].width)
+                        value_rect = pygame.Rect(slider_rect.x, slider_rect.y, value_width, slider_rect.height)
+                        pygame.draw.rect(popup_surface, self.button_color, value_rect, border_radius=3)
+                        
+                        # Marco
+                        pygame.draw.rect(popup_surface, self.border_color, slider_rect, 1, border_radius=3)
+                        
+                        # Círculo indicador
+                        knob_x = slider_rect.x + value_width
+                        knob_y = slider_rect.y + slider_rect.height // 2
+                        knob_radius = slider_rect.height // 1.5
+                        pygame.draw.circle(popup_surface, self.text_color, (knob_x, knob_y), knob_radius)
+                        pygame.draw.circle(popup_surface, self.button_hover, (knob_x, knob_y), knob_radius - 2)
+
             y_offset = 20 - self.scroll_offset
-            
+
             # Título con icono
             if self.title:
                 title_text = f"{self.title}"
@@ -498,3 +590,56 @@ def create_help_popup(screen, screen_name):
     ]
     
     return PopUp(screen, content_data["title"], content_data["content"], buttons, "help")
+
+
+def create_settings_popup(screen, audio_manager):
+    """
+    Crear pop-up de configuración con controles interactivos para el audio
+    
+    Args:
+        screen: Superficie de pygame
+        audio_manager: Instancia del administrador de audio
+    """
+    # Obtener valores actuales directamente usando los nuevos métodos
+    music_volume = audio_manager.get_music_volume()
+    sfx_volume = audio_manager.get_sfx_volume()
+    music_enabled = audio_manager.is_music_enabled()
+    sfx_enabled = audio_manager.is_sfx_enabled()
+
+    # Textos de botones según estado actual
+    music_button_text = "Música: Activada" if music_enabled else "Música: Desactivada"
+    sfx_button_text = "Efectos: Activados" if sfx_enabled else "Efectos: Desactivados"
+    
+    settings_content = [
+        "Ajusta las opciones del juego:",
+        "",
+        "• Volumen de Música:",
+        "",  # Espacio para el slider
+        "",
+        "• Volumen de Efectos:",
+        "",  # Espacio para el slider
+    ]
+
+    buttons = [
+        {"text": music_button_text, "action": "toggle_music"},
+        {"text": sfx_button_text, "action": "toggle_sfx"},
+        {"text": "Guardar", "action": "save_settings"},
+        {"text": "Cancelar", "action": "cancel"}
+    ]
+
+    popup = PopUp(screen, "Configuración", settings_content, buttons, "info")
+    
+    # Añadir sliders después de calculadas las dimensiones
+    # Los valores de posición (x, y) son relativos al popup
+    slider_width = int(popup.width * 0.7)
+    slider_x = (popup.width - slider_width) // 2
+    
+    # Slider para música - ajustar posición vertical según contenido
+    music_y = 90  # Posición aproximada debajo del texto "Volumen de Música:"
+    popup.add_slider(slider_x, music_y, slider_width, 10, 0.0, 1.0, music_volume, "music_volume")
+    
+    # Slider para efectos - ajustar posición vertical según contenido
+    sfx_y = 150  # Posición aproximada debajo del texto "Volumen de Efectos:"
+    popup.add_slider(slider_x, sfx_y, slider_width, 10, 0.0, 1.0, sfx_volume, "sfx_volume")
+    
+    return popup

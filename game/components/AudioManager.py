@@ -225,11 +225,22 @@ class AudioManager:
     
     def toggle_music(self):
         """Alternar música encendida/apagada"""
-        self._music_enabled = not self._music_enabled
-        if not self._music_enabled:
-            self.stop_music()
-        return self._music_enabled
-    
+        if self._music_enabled:
+            # Si la música está habilitada, la desactivamos
+            self._music_enabled = False
+            pygame.mixer.music.pause()  # Pausar la música en lugar de detenerla
+        else:
+            # Si la música está deshabilitada, la activamos
+            self._music_enabled = True
+            
+            if pygame.mixer.music.get_busy():
+                # Si la música estaba en pausa, la reanudamos
+                pygame.mixer.music.unpause()
+            else:
+                # Si la música no estaba cargada o se detuvo completamente, la reiniciamos
+                if self._current_music:
+                    self.play_music(self._current_music)
+
     def toggle_sfx(self):
         """Alternar efectos de sonido encendidos/apagados"""
         self._sfx_enabled = not self._sfx_enabled
@@ -355,6 +366,74 @@ class AudioManager:
             'cached_sounds': len(self._audio_cache),
             'loading_threads': len([t for t in self._loading_threads if t.is_alive()])
         }
+
+    def get_music_volume(self):
+        """Obtener el volumen actual de la música"""
+        return self._current_volume
+
+    def get_sfx_volume(self):
+        """Obtener el volumen actual de los efectos"""
+        return self._sfx_volume
+
+    def is_music_enabled(self):
+        """Verificar si la música está habilitada"""
+        return self._music_enabled
+
+    def is_sfx_enabled(self):
+        """Verificar si los efectos están habilitados"""
+        return self._sfx_enabled
+
+    def save_audio_settings_to_profile(self, save_system):
+        """Guardar configuración de audio en el perfil actual del usuario"""
+        if not save_system or not save_system.current_profile:
+            print("No hay perfil activo para guardar configuración de audio")
+            return False
+            
+        settings = {
+            "music_volume": self._current_volume,
+            "sfx_volume": self._sfx_volume,
+            "music_enabled": self._music_enabled,
+            "sfx_enabled": self._sfx_enabled
+        }
+        
+        # Actualizar la configuración en el perfil
+        return save_system.update_settings(settings)
+
+    def load_audio_settings_from_profile(self, save_system):
+        """Cargar configuración de audio desde el perfil actual del usuario"""
+        if not save_system or not save_system.current_profile:
+            print("No hay perfil activo para cargar configuración de audio")
+            return False
+        
+        # Obtener configuración del perfil
+        profile = save_system.get_current_profile_data()
+        if profile and "settings" in profile:
+            # Aplicar configuración de audio
+            self._current_volume = profile["settings"].get("music_volume", 0.7)
+            self._sfx_volume = profile["settings"].get("sfx_volume", 0.8)
+            self._music_enabled = profile["settings"].get("music_enabled", True)
+            self._sfx_enabled = profile["settings"].get("sfx_enabled", True)
+            
+            # Aplicar volumen actual a la música si está sonando
+            pygame.mixer.music.set_volume(self._current_volume)
+            
+            # Actualizar volumen de efectos cargados
+            with self._preload_lock:
+                for sound in self._audio_cache.values():
+                    try:
+                        sound.set_volume(self._sfx_volume)
+                    except Exception as e:
+                        print(f"Error actualizando volumen de efecto: {e}")
+            
+            # Si la música está desactivada, detenerla
+            if not self._music_enabled and pygame.mixer.music.get_busy():
+                self.stop_music()
+            # Si la música está activada y hay una pista actual, asegurar que suena
+            elif self._music_enabled and not pygame.mixer.music.get_busy() and self._current_music:
+                self.play_music(self._current_music)
+                
+            return True
+        return False
 
 # Instancia global del gestor de audio
 audio_manager = AudioManager()

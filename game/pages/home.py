@@ -8,7 +8,8 @@ import time
 
 from ..config.save_system import GameSaveSystem
 from ..components.Button import Button
-from ..components.PopUp import PopUp, create_help_popup
+from ..components.PopUp import PopUp, create_help_popup, create_settings_popup
+from ..components.AudioManager import audio_manager
 
 class HockeyMainScreen:
     def __init__(self, screen=None, save_system=None):
@@ -141,9 +142,12 @@ class HockeyMainScreen:
         self.show_gaia_panel = False
         self.show_progress_panel = True
         self.help_popup = None
+        self.settings_popup = None  # Añadir variable para el popup de configuración
         
         # Cargar perfiles al iniciar
         self.load_profiles()
+        if self.save_system.current_profile:
+            audio_manager.load_audio_settings_from_profile(self.save_system)
         
         self.clock = pygame.time.Clock()
     
@@ -183,6 +187,8 @@ class HockeyMainScreen:
                     # Desbloquear enemigos según nivel
                     if self.game_data['levels_unlocked'] >= self.enemy_agents.index(enemy) + 1:
                         enemy["unlocked"] = True
+
+                audio_manager.load_audio_settings_from_profile(self.save_system)
                 
                 self.success_message = f"¡Bienvenido de vuelta, {profile['player_name']}!"
                 self.message_time = time.time()
@@ -215,6 +221,9 @@ class HockeyMainScreen:
                 'levels_unlocked': 1,
                 'current_level': 1
             }
+
+             # Guardar la configuración de audio actual en el perfil
+            audio_manager.save_audio_settings_to_profile(self.save_system)
             
             # Restablecer estado de enemigos
             for enemy in self.enemy_agents:
@@ -848,7 +857,10 @@ class HockeyMainScreen:
                     return None
                 elif button_key == 'settings':
                     print("Abriendo configuración...")
-                    return 'settings'
+                    # Crear popup de configuración
+                    self.settings_popup = create_settings_popup(self.screen, audio_manager)
+                    self.settings_popup.show()
+                    return None
                 elif button_key == 'help':
                     print("Abriendo ayuda...")
                     self.help_popup = create_help_popup(self.screen, "home")
@@ -1180,11 +1192,16 @@ class HockeyMainScreen:
             # Actualizar efectos ambientales
             self.update_environmental_effects(dt)
             
-            # Actualizar popup si existe
+            # Actualizar popups si existen
             if self.help_popup:
                 popup_result = self.help_popup.update(dt)
                 if popup_result == "closed":
                     self.help_popup = None
+                    
+            if self.settings_popup:
+                popup_result = self.settings_popup.update(dt)
+                if popup_result == "closed":
+                    self.settings_popup = None
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -1198,6 +1215,62 @@ class HockeyMainScreen:
                         # Aquí podrías implementar alguna acción adicional
                         pass
                     continue  # Si el popup está visible, no procesar otros eventos
+                
+                # Manejar eventos del popup de configuración si está visible
+                if self.settings_popup and self.settings_popup.is_visible():
+                    popup_action = self.settings_popup.handle_event(event)
+                    if popup_action:
+                        if popup_action == "toggle_music":
+                            # Alternar el estado de la música
+                            audio_manager.toggle_music()
+                            audio_manager.save_audio_settings_to_profile(self.save_system)
+                            # Recrear el popup para actualizar el texto del botón
+                            self.settings_popup = create_settings_popup(self.screen, audio_manager)
+                            self.settings_popup.show()
+                        elif popup_action == "toggle_sfx":
+                            # Alternar el estado de los efectos de sonido
+                            audio_manager.toggle_sfx()
+                            audio_manager.save_audio_settings_to_profile(self.save_system)
+                            # Recrear el popup para actualizar el texto del botón
+                            self.settings_popup = create_settings_popup(self.screen, audio_manager)
+                            self.settings_popup.show()
+                        elif popup_action == "save_settings":
+                            # Guardar los cambios de configuración
+                            music_volume = 0.5
+                            sfx_volume = 0.5
+                            
+                            # Obtener los valores actuales de los sliders
+                            for element in self.settings_popup.interactive_elements:
+                                if element["id"] == "music_volume":
+                                    music_volume = element["value"]
+                                elif element["id"] == "sfx_volume":
+                                    sfx_volume = element["value"]
+                            
+                            # Aplicar y guardar cambios
+                            audio_manager.set_music_volume(music_volume)
+                            audio_manager.set_sfx_volume(sfx_volume)
+                            #audio_manager.save_audio_settings()
+                            audio_manager.save_audio_settings_to_profile(self.save_system)
+                            self.settings_popup.close()
+                        elif popup_action == "cancel":
+                            # Descartar cambios y cerrar
+                            audio_manager.load_audio_settings_from_profile(self.save_system)
+                            #audio_manager.load_audio_settings()  # Restaurar configuración guardada
+                            self.settings_popup.close()
+                        elif isinstance(popup_action, dict) and popup_action.get("action") == "slider_change":
+                            # Actualizar el volumen en tiempo real mientras se arrastra el slider
+                            slider_id = popup_action.get("id")
+                            value = popup_action.get("value")
+                            
+                            if slider_id == "music_volume":
+                                audio_manager.set_music_volume(value)
+                            elif slider_id == "sfx_volume":
+                                audio_manager.set_sfx_volume(value)
+                                # Reproducir un sonido para probar el volumen de efectos
+                                if int(time.time() * 2) % 2 == 0:
+                                    audio_manager.play_sound_effect("button_hover")
+                    continue  # Si el popup está visible, no procesar otros eventos
+
 
                 # Manejo de eventos según la pantalla actual
                 if self.current_screen == "main":
@@ -1255,7 +1328,10 @@ class HockeyMainScreen:
                 self.draw_create_profile_screen()
             
             # Mostrar mensajes generales   
-            self.draw_messages()            
+            self.draw_messages()
+
+            if self.settings_popup:
+                self.settings_popup.draw()            
             
             pygame.display.flip()
         

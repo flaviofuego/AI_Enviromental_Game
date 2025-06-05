@@ -179,6 +179,7 @@ if __name__ == "__main__":
     
     selected_level = None
     exit_game = False
+    settings_popup = None  # Variable para almacenar el popup de configuración
     
     # Iniciar música del menú principal
     audio_manager.preload_audio_for_screen("home")

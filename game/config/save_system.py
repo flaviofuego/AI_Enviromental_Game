@@ -91,7 +91,9 @@ class GameSaveSystem:
             "settings": {
                 "music_volume": 0.7,
                 "sfx_volume": 0.8,
-                "difficulty": "normal"
+                "difficulty": "normal",
+                "music_enabled": True,
+                "sfx_enabled": True
             },
             "stats": {
                 "games_played": 0,
