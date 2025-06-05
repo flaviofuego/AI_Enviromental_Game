@@ -5,7 +5,7 @@ import os
 import numpy as np
 import torch
 import time
-
+from game.components.AudioManager import audio_manager
 
 # Performance optimization settings
 torch.cuda.is_available = lambda: False
@@ -1059,6 +1059,33 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
         
         # Cargar sprites del nivel
         custom_sprites = SpriteLoader.load_level_sprites(level_config['level_id'])
+        
+        level_id = level_config['level_id']
+        
+        # Mapeo de niveles a música específica
+        level_music_map = {
+            1: "nivel_1",      # Basura en el Ártico
+            2: "nivel_2",       # Agujero de Ozono  
+            3: "nivel_1",        # Tormenta de Smog
+            4: "nivel_2",      # Bosque Desvanecido
+            5: "nivel_1"   # Isla de Calor Urbano
+        }
+        
+        # Si no hay música específica del nivel, usar música de gameplay general
+        level_music = level_music_map.get(level_id, "gameplay")
+        
+        # Cargar configuración de audio desde el perfil del usuario
+        if save_system:
+            audio_manager.load_audio_settings_from_profile(save_system)
+            
+        # Iniciar música del nivel con loop infinito
+        print(f"Iniciando música del nivel {level_id}: {level_music}")
+        audio_manager.play_music(level_music, loop=True, fade_in_ms=1500)
+    else:
+        # Música por defecto si no hay configuración de nivel
+        audio_manager.play_music("gameplay", loop=True, fade_in_ms=1000)
+    
+        
     
     # Crear objetos del juego con sprites personalizados
     table = Table()
