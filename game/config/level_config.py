@@ -7,9 +7,12 @@ LEVELS = {
         "name": "Arctic Meltdown",
         "description": "El hielo ártico se derrite rápidamente. ¡Juega para salvarlo!",
         "theme": {
-            "background": "arctic_bg.png",
-            "mallet": "ice_mallet.png",
-            "puck": "snowflake_puck.png",
+            "background": "cancha.png",
+            "mallet_ai": "mallet_IA.png",
+            "mallet_player": "mallet_IA.png",  # Usará el mismo pero con diferente tinte
+            "puck": "puck.png",
+            "goal_left": "porteria_izq.png",
+            "goal_right": "porteria_der.png",
             "table_color": (173, 216, 230),  # Ice blue
             "glow_colors": {
                 "player": (0, 191, 255),  # Deep sky blue
@@ -17,15 +20,20 @@ LEVELS = {
                 "puck": (240, 248, 255)   # White blue
             }
         },
-        "difficulty": 1
+        "difficulty": 1,
+        "ai_reaction_speed": 0.08,  # IA más lenta
+        "ai_prediction_factor": 0.2
     },
     2: {
         "name": "Forest Guardian",
         "description": "Los bosques están en peligro. ¡Defiéndelos!",
         "theme": {
-            "background": "forest_bg.png",
-            "mallet": "leaf_mallet.png",
-            "puck": "seed_puck.png",
+            "background": "cancha.png",
+            "mallet_ai": "mallet_IA.png",
+            "mallet_player": "mallet_IA.png",
+            "puck": "puck.png",
+            "goal_left": "porteria_izq.png",
+            "goal_right": "porteria_der.png",
             "table_color": (34, 139, 34),  # Forest green
             "glow_colors": {
                 "player": (50, 205, 50),   # Lime green
@@ -33,15 +41,20 @@ LEVELS = {
                 "puck": (0, 100, 0)        # Dark green
             }
         },
-        "difficulty": 2
+        "difficulty": 2,
+        "ai_reaction_speed": 0.10,  # IA velocidad media
+        "ai_prediction_factor": 0.3
     },
     3: {
         "name": "Ocean Defense",
         "description": "Los océanos sufren contaminación. ¡Protégelos!",
         "theme": {
-            "background": "ocean_bg.png",
-            "mallet": "wave_mallet.png",
-            "puck": "bubble_puck.png",
+            "background": "cancha.png",
+            "mallet_ai": "mallet_IA.png",
+            "mallet_player": "mallet_IA.png",
+            "puck": "puck.png",
+            "goal_left": "porteria_izq.png",
+            "goal_right": "porteria_der.png",
             "table_color": (0, 105, 148),  # Deep blue
             "glow_colors": {
                 "player": (30, 144, 255),  # Dodger blue
@@ -49,7 +62,51 @@ LEVELS = {
                 "puck": (135, 206, 250)    # Light sky blue
             }
         },
-        "difficulty": 3
+        "difficulty": 3,
+        "ai_reaction_speed": 0.12,  # IA más rápida
+        "ai_prediction_factor": 0.35
+    },
+    4: {
+        "name": "City Heat Island",
+        "description": "Las ciudades se sobrecalientan. ¡Enfríalas!",
+        "theme": {
+            "background": "cancha.png",
+            "mallet_ai": "mallet_IA.png",
+            "mallet_player": "mallet_IA.png",
+            "puck": "puck.png",
+            "goal_left": "porteria_izq.png",
+            "goal_right": "porteria_der.png",
+            "table_color": (70, 70, 70),  # Urban grey
+            "glow_colors": {
+                "player": (255, 140, 0),   # Orange
+                "ai": (220, 50, 50),       # Red
+                "puck": (255, 215, 0)      # Gold
+            }
+        },
+        "difficulty": 4,
+        "ai_reaction_speed": 0.15,  # IA muy rápida
+        "ai_prediction_factor": 0.4
+    },
+    5: {
+        "name": "Final Stand",
+        "description": "¡El destino del planeta está en tus manos!",
+        "theme": {
+            "background": "cancha.png",
+            "mallet_ai": "mallet_IA.png",
+            "mallet_player": "mallet_IA.png",
+            "puck": "puck.png",
+            "goal_left": "porteria_izq.png",
+            "goal_right": "porteria_der.png",
+            "table_color": (20, 20, 20),  # Dark
+            "glow_colors": {
+                "player": (147, 0, 211),   # Purple
+                "ai": (255, 0, 0),         # Pure red
+                "puck": (255, 255, 255)    # White
+            }
+        },
+        "difficulty": 5,
+        "ai_reaction_speed": 0.18,  # IA máxima velocidad
+        "ai_prediction_factor": 0.5
     }
 }
 
@@ -62,7 +119,7 @@ def get_asset_path(level_id, asset_name):
     import os
     
     # Base assets directory
-    assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "levels", str(level_id))
+    assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "niveles", str(level_id))
     
     # Create directory if it doesn't exist
     os.makedirs(assets_dir, exist_ok=True)

@@ -612,7 +612,7 @@ class LevelSelectScreen:
             if root_dir not in sys.path:
                 sys.path.append(root_dir)
             
-            from main_improved import start_game_with_level
+            from game.main_hub import start_game
             
             # Verificar que el nivel existe y está desbloqueado
             level_data = None
@@ -640,21 +640,40 @@ class LevelSelectScreen:
             
             # Pausa breve para mostrar el mensaje
             pygame.time.wait(500)
-              # Iniciar el juego con la configuración del nivel
-            result = start_game_with_level(
-                level_id=level_id,
-                save_system=self.save_system,
-                screen=self.screen
+              # Iniciar el nivel seleccionado
+            level_config = {
+                'level_id': level_id,
+                'name': level_data['name'],
+                'enemy': level_data.get('enemy', 'IA')
+            }
+            
+            # Llamar al juego con la configuración del nivel
+            result = start_game(
+                use_rl=True,  # Usar RL para IA más inteligente
+                screen=self.screen,
+                level_config={'level_id': level_id},
+                save_system=self.save_system
             )
             
             # Actualizar el estado del nivel después del juego
             self.load_levels_status()
             
             # Mostrar resultado
-            if result == "victory":
-                self.show_message(f"¡Felicidades! Has completado {level_data['name']}", "success")
-            elif result == "defeat":
-                self.show_message(f"Intenta de nuevo. {level_data['name']} te espera.", "info")
+            if result and isinstance(result, dict):
+                if result.get('victory', False):
+                    self.show_message(f"¡Felicidades! Has completado {level_data['name']}", "success")
+                    # Guardar progreso del nivel si ganó
+                    if self.save_system:
+                        try:
+                            self.save_system.save_level_progress(level_id, {
+                                'completed': True,
+                                'player_score': result.get('player_score', 0),
+                                'ai_score': result.get('ai_score', 0)
+                            })
+                        except Exception as e:
+                            print(f"Error guardando progreso: {e}")
+                else:
+                    self.show_message(f"Intenta de nuevo. {level_data['name']} te espera.", "info")
             else:
                 self.show_message("Juego cancelado", "info")
             

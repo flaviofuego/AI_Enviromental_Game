@@ -12,7 +12,7 @@ from game.pages.home import HockeyMainScreen
 from game.pages.Level_Select import LevelSelectScreen
 from game.config.save_system import GameSaveSystem
 from game.components.AudioManager import audio_manager
-from main_improved import main as start_game
+from main_improved import main_with_config as start_game
 
 def ice_melt_transition(screen, fade_out=True, duration=1.5):
     """Crea un efecto de transición temático con derretimiento de hielo"""

@@ -623,6 +623,13 @@ def main(level_id=None, debug_mode=True):
                     ai_mallet.velocity = [0, 0]
         
         # Draw everything
+        # Dibujar fondo personalizado si está disponible
+        if 'background' in custom_sprites and custom_sprites['background'] is not None:
+            screen.blit(custom_sprites['background'], (0, 0))
+        else:
+            # Si no hay fondo personalizado, usar el color de la mesa
+            screen.fill(table.table_color)
+        
         table.draw(screen)
         
         # Draw glows - optimizado para mejor rendimiento
@@ -967,63 +974,95 @@ def start_game_with_level(level_id, save_system=None, screen=None):
 
 def main_with_config(use_rl=False, model_path=None, screen=None, level_config=None, save_system=None):
     """
-    Versión modificada de main() que acepta configuración externa
-    """
-    from constants import set_screen_dimensions, get_scale_factors
+    Función principal del juego con configuración específica de nivel
     
-    # Usar la pantalla proporcionada o crear una nueva
+    Args:
+        use_rl: Si usar modelo de RL
+        model_path: Ruta del modelo a cargar
+        screen: Pantalla de pygame existente
+        level_config: Configuración del nivel
+        save_system: Sistema de guardado
+    
+    Returns:
+        dict con resultados del juego
+    """
+    
     if screen is None:
         pygame.init()
-        screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        clock = pygame.time.Clock()
-        own_screen = True
+        info = pygame.display.Info()
+        screen_width = min(1200, info.current_w - 100)
+        screen_height = min(800, info.current_h - 100)
+        screen = pygame.display.set_mode((screen_width, screen_height))
     else:
-        # Actualizar las dimensiones globales para que coincidan con la pantalla del menú
-        screen_width = screen.get_width()
-        screen_height = screen.get_height()
-        set_screen_dimensions(screen_width, screen_height)
+        screen_width, screen_height = screen.get_size()
+    
+    # Establecer dimensiones actuales
+    set_screen_dimensions(screen_width, screen_height)
+    current_width = screen_width
+    current_height = screen_height
+    
+    clock = pygame.time.Clock()
+    
+    # Cargar sprites personalizados si hay configuración de nivel
+    custom_sprites = {}
+    if level_config and 'level_id' in level_config:
+        from sprite_loader import SpriteLoader
+        from game.config.level_config import get_level_config
         
-        clock = pygame.time.Clock()
-        own_screen = False
+        # Obtener configuración completa del nivel
+        full_config = get_level_config(level_config['level_id'])
+        level_config.update(full_config)
+        
+        # Cargar sprites del nivel
+        custom_sprites = SpriteLoader.load_level_sprites(level_config['level_id'])
     
-    # Obtener dimensiones actuales después de la configuración
-    current_width, current_height = screen.get_width(), screen.get_height()
-    
-    # Aplicar configuración del nivel si se proporciona
-    if level_config:
-        # Cambiar título de ventana
-        pygame.display.set_caption(f"Nivel: {level_config['name']} - vs {level_config['enemy']}")
-    
-    # Crear objetos del juego con escalado
+    # Crear objetos del juego con sprites personalizados
     table = Table()
-    human_mallet = HumanMallet()
-    puck = Puck()
-    ai_mallet = AIMallet()
     
-    # Aplicar escalado a los objetos del juego
-    scale_x, scale_y = get_scale_factors()
+    # Aplicar customización de la mesa
+    if level_config:
+        table.table_color = level_config.get('theme', {}).get('table_color', BLACK)
+        
+        # Establecer sprites de porterías si están disponibles
+        if 'goal_left' in custom_sprites and 'goal_right' in custom_sprites:
+            table.set_goal_sprites(custom_sprites['goal_left'], custom_sprites['goal_right'])
     
-    # Escalar posiciones iniciales
-    human_mallet.position = [current_width // 4, current_height // 2]
-    human_mallet.rect.center = human_mallet.position
+    # Crear sprites con imágenes personalizadas
+    puck_image = custom_sprites.get('puck', None)
+    puck = Puck(custom_image=puck_image)
     
-    ai_mallet.position = [current_width * 3 // 4, current_height // 2]
-    ai_mallet.rect.center = ai_mallet.position
+    player_mallet_image = custom_sprites.get('mallet_player', None)
+    human_mallet = HumanMallet(custom_image=player_mallet_image)
     
-    puck.position = [current_width // 2, current_height // 2]
-    puck.rect.center = puck.position
+    ai_mallet_image = custom_sprites.get('mallet_ai', None)
+    ai_reaction_speed = level_config.get('ai_reaction_speed', None) if level_config else None
+    ai_prediction_factor = level_config.get('ai_prediction_factor', None) if level_config else None
+    ai_mallet = AIMallet(custom_image=ai_mallet_image, 
+                        reaction_speed=ai_reaction_speed,
+                        prediction_factor=ai_prediction_factor)
     
     # Cargar modelo RL si se especifica
     model = None
     model_type = "original"
     
-    if use_rl and model_path:
-        try:
-            model, model_type = load_optimized_model(model_path)
-            print(f"Loaded model: {model_path}")
-        except Exception as e:
-            print(f"Error loading model: {e}")
-            use_rl = False
+    if use_rl:
+        if model_path:
+            try:
+                model, model_type = load_optimized_model(model_path)
+                print(f"Modelo cargado: {model_path}")
+            except Exception as e:
+                print(f"Error cargando modelo: {e}")
+                use_rl = False
+        else:
+            # Auto-detectar mejor modelo
+            model_path, model_type = find_best_model()
+            if model_path:
+                try:
+                    model, _ = load_optimized_model(model_path, model_type)
+                    print(f"Modelo auto-detectado: {model_path}")
+                except Exception as e:
+                    print(f"Error cargando modelo: {e}")
+                    use_rl = False
     
     # Variables del juego
     player_score = 0
@@ -1292,6 +1331,13 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                     ai_mallet.velocity = [0, 0]
         
         # Draw everything
+        # Dibujar fondo personalizado si está disponible
+        if 'background' in custom_sprites and custom_sprites['background'] is not None:
+            screen.blit(custom_sprites['background'], (0, 0))
+        else:
+            # Si no hay fondo personalizado, usar el color de la mesa
+            screen.fill(table.table_color)
+        
         table.draw(screen)
         
         # Draw glows - optimizado para mejor rendimiento

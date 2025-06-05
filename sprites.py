@@ -8,22 +8,38 @@ from utils import calculate_vector, normalize_vector, vector_length, line_circle
 class Mallet(pygame.sprite.Sprite):
     """Clase base para los mallets (mazos)"""
     
-    def __init__(self, x, y, color):
+    def __init__(self, x, y, color, custom_image=None):
         super().__init__()
         # Calcular radio escalado basado en las dimensiones actuales
         scale_factor = min(get_screen_dimensions()[0]/800, get_screen_dimensions()[1]/500)
         self.radius = int(MULLET_RADIUS * scale_factor)
         
-        self.image = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
-        pygame.draw.circle(self.image, color, (self.radius, self.radius), self.radius)
-        # Añadir brillo al centro
-        pygame.draw.circle(self.image, (255, 255, 255, 150), (self.radius, self.radius), self.radius // 2)
+        if custom_image is not None:
+            # Usar imagen personalizada
+            self.image = custom_image
+            # Asegurar que la imagen tenga el tamaño correcto
+            if self.image.get_size() != (self.radius * 2, self.radius * 2):
+                self.image = pygame.transform.smoothscale(self.image, (self.radius * 2, self.radius * 2))
+        else:
+            # Crear sprite por defecto
+            self.image = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(self.image, color, (self.radius, self.radius), self.radius)
+            # Añadir brillo al centro
+            pygame.draw.circle(self.image, (255, 255, 255, 150), (self.radius, self.radius), self.radius // 2)
+        
         self.rect = self.image.get_rect(center=(x, y))
-        self.mask = pygame.mask.from_surface(self.image)
+        # Crear máscara circular para colisiones precisas
+        self.mask = self._create_circular_mask()
         self.velocity = [0, 0]
         self.position = [x, y]
         self.prev_position = self.position.copy()
-        
+    
+    def _create_circular_mask(self):
+        """Crea una máscara circular para colisiones precisas"""
+        mask_surface = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(mask_surface, (255, 255, 255, 255), (self.radius, self.radius), self.radius)
+        return pygame.mask.from_surface(mask_surface)
+    
     def update(self, mouse_pos=None):
         current_width, current_height = get_screen_dimensions()
         self.prev_position = self.position.copy()
@@ -51,18 +67,18 @@ class Mallet(pygame.sprite.Sprite):
 class HumanMallet(Mallet):
     """Mallet controlado por el jugador humano"""
     
-    def __init__(self):
+    def __init__(self, custom_image=None):
         current_width, current_height = get_screen_dimensions()
-        super().__init__(current_width // 4, current_height // 2, NEON_RED)
+        super().__init__(current_width // 4, current_height // 2, NEON_RED, custom_image)
 
 class AIMallet(Mallet):
     """Mallet controlado por la IA simple"""
     
-    def __init__(self):
+    def __init__(self, custom_image=None, reaction_speed=None, prediction_factor=None):
         current_width, current_height = get_screen_dimensions()
-        super().__init__(current_width * 3 // 4, current_height // 2, NEON_GREEN)
-        self.reaction_speed = 0.12  # Velocidad de reacción aumentada (era 0.1)
-        self.prediction_factor = 0.5  # Factor de predicción de trayectoria
+        super().__init__(current_width * 3 // 4, current_height // 2, NEON_GREEN, custom_image)
+        self.reaction_speed = reaction_speed if reaction_speed is not None else 0.18
+        self.prediction_factor = prediction_factor if prediction_factor is not None else 0.5
         
     def update(self, puck_pos, puck_velocity=None):
         current_width, current_height = get_screen_dimensions()
@@ -150,26 +166,41 @@ class AIMallet(Mallet):
 class Puck(pygame.sprite.Sprite):
     """Clase para el disco (puck)"""
     
-    def __init__(self):
+    def __init__(self, custom_image=None):
         super().__init__()
         # Calcular radio escalado
         scale_factor = min(get_screen_dimensions()[0]/800, get_screen_dimensions()[1]/500)
         self.radius = int(15 * scale_factor)
         
-        self.image = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
-        pygame.draw.circle(self.image, NEON_BLUE, (self.radius, self.radius), self.radius)
-        # Añadir brillo
-        pygame.draw.circle(self.image, (255, 255, 255, 150), (self.radius, self.radius), self.radius // 2)
+        if custom_image is not None:
+            # Usar imagen personalizada
+            self.image = custom_image
+            # Asegurar que la imagen tenga el tamaño correcto
+            if self.image.get_size() != (self.radius * 2, self.radius * 2):
+                self.image = pygame.transform.smoothscale(self.image, (self.radius * 2, self.radius * 2))
+        else:
+            # Crear sprite por defecto
+            self.image = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(self.image, NEON_BLUE, (self.radius, self.radius), self.radius)
+            # Añadir brillo
+            pygame.draw.circle(self.image, (255, 255, 255, 150), (self.radius, self.radius), self.radius // 2)
         
         current_width, current_height = get_screen_dimensions()
         self.rect = self.image.get_rect(center=(current_width // 2, current_height // 2))
-        self.mask = pygame.mask.from_surface(self.image)
+        # Crear máscara circular para colisiones precisas
+        self.mask = self._create_circular_mask()
         self.velocity = [random.choice([-2, 2]), random.choice([-2, 2])]
         self.position = [current_width // 2, current_height // 2]
         self.prev_position = self.position.copy()
         self.max_speed = MAX_PUCK_SPEED
         self.friction = FRICTION
-        
+    
+    def _create_circular_mask(self):
+        """Crea una máscara circular para colisiones precisas"""
+        mask_surface = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(mask_surface, (255, 255, 255, 255), (self.radius, self.radius), self.radius)
+        return pygame.mask.from_surface(mask_surface)
+    
     def update(self):
         current_width, current_height = get_screen_dimensions()
         self.prev_position = self.position.copy()
