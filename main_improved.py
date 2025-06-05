@@ -281,7 +281,7 @@ def find_best_model():
     
     return None, None
 
-def main(level_id=None, debug_mode=True):
+def main(level_id=None, debug_mode=True, use_rl=True):
     """Main game function with support for improved models"""
     # Initialize pygame
     pygame.init()
@@ -388,6 +388,7 @@ def main(level_id=None, debug_mode=True):
         
         # Get mouse position for both game and UI interaction
         mouse_pos = pygame.mouse.get_pos()
+        mouse_clicked = False
         
         # Handle all events at once
         for event in pygame.event.get():
@@ -656,7 +657,7 @@ def main(level_id=None, debug_mode=True):
         font = pygame.font.Font(None, 36)
         score_text = font.render(f"{player_score} - {ai_score}", True, WHITE)
         screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 20))
-        
+
         # Draw game over screen if game is over
         if game_over:
             # Semi-transparent overlay
@@ -972,6 +973,17 @@ def start_game_with_level(level_id, save_system=None, screen=None):
         if own_screen:
             pygame.quit()
 
+def draw_round_button(screen, color, center, radius, text, font_size=36):
+    """Dibuja un botón circular con texto centrado"""
+    pygame.draw.circle(screen, color, center, radius)
+    pygame.draw.circle(screen, WHITE, center, radius, 2)  # Borde blanco
+    
+    font = pygame.font.Font(None, font_size)
+    text_surface = font.render(text, True, WHITE)
+    text_rect = text_surface.get_rect(center=center)
+    screen.blit(text_surface, text_rect)
+    return pygame.Rect(center[0]-radius, center[1]-radius, radius*2, radius*2)
+
 def main_with_config(use_rl=False, model_path=None, screen=None, level_config=None, save_system=None):
     """
     Función principal del juego con configuración específica de nivel
@@ -1072,6 +1084,10 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
     # Game over state
     game_over = False
     winner = None
+    paused = False 
+    waiting_for_resume_click = False  
+    resume_target_pos = None 
+    resume_target_radius = 20 
     
     # RL prediction management
     last_action = 4  # Default to "stay" action
@@ -1119,6 +1135,7 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
         
         # Get mouse position for both game and UI interaction
         mouse_pos = pygame.mouse.get_pos()
+        mouse_clicked = False
         
         # Handle all events at once
         for event in pygame.event.get():
@@ -1126,7 +1143,14 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                 running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    running = False
+                    if not game_over: 
+                        if not waiting_for_resume_click:
+                            paused = not paused
+                            if paused:
+                                resume_target_pos = (human_mallet.position[0], human_mallet.position[1])
+                        else:
+                            waiting_for_resume_click = False
+                            paused = True
                 elif event.key == pygame.K_f:
                     show_fps = not show_fps
                 elif event.key == pygame.K_r and not game_over:
@@ -1140,9 +1164,11 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
                     ai_mallet.velocity = [0, 0]
                     show_reset_message = True
                     reset_message_timer = pygame.time.get_ticks()
-        
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_clicked = True
+
         # Only update game state if not in game over
-        if not game_over:
+        if not game_over and not paused and not waiting_for_resume_click:
             # Update human mallet with the mouse position
             human_mallet.update(mouse_pos)
             
@@ -1356,7 +1382,81 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
         font = pygame.font.Font(None, 36)
         score_text = font.render(f"{player_score} - {ai_score}", True, WHITE)
         screen.blit(score_text, (current_width // 2 - score_text.get_width() // 2, 20))
-        
+
+        if (paused or waiting_for_resume_click) and not game_over:
+            # Overlay semi-transparente
+            overlay = pygame.Surface((current_width, current_height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 128))
+            screen.blit(overlay, (0, 0))
+            if waiting_for_resume_click:
+                confirm_font = pygame.font.Font(None, 36)
+                confirm_text = confirm_font.render("Haz click cerca de tu mazo para reanudar", True, WHITE)
+                confirm_rect = confirm_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 100))
+                screen.blit(confirm_text, confirm_rect)
+                
+                # Dibujar área objetivo
+                pygame.draw.circle(screen, (0, 255, 0, 100), resume_target_pos, resume_target_radius)
+                pygame.draw.circle(screen, (0, 255, 0), resume_target_pos, resume_target_radius, 2)
+                
+                # Dibujar línea desde mouse hasta objetivo si está fuera
+                if vector_length((mouse_pos[0]-resume_target_pos[0], mouse_pos[1]-resume_target_pos[1])) > resume_target_radius:
+                    pygame.draw.line(screen, (255, 255, 255), mouse_pos, resume_target_pos, 1)
+                
+                # Verificar click en área
+                if mouse_clicked:
+                    distance = vector_length((mouse_pos[0]-resume_target_pos[0], mouse_pos[1]-resume_target_pos[1]))
+                    if distance <= resume_target_radius:
+                        paused = False
+                        waiting_for_resume_click = False
+                        resume_target_pos = None
+            else:
+                pause_font = pygame.font.Font(None, 72)
+                pause_text = pause_font.render("PAUSA", True, WHITE)
+                pause_rect = pause_text.get_rect(center=(current_width // 2, current_height // 2 - 150))
+                screen.blit(pause_text, pause_rect)
+                
+                # Botones redondos
+                button_radius = 60
+                button_y = current_height // 2
+                
+                # Botón Reiniciar
+                restart_color = (100, 100, 0) if pygame.Rect(current_width//2 - button_radius - 150, button_y - button_radius, 
+                                                        button_radius*2, button_radius*2).collidepoint(mouse_pos) else (70, 70, 0)            
+                restart_btn = draw_round_button(screen, restart_color, (current_width//2 - 150, button_y), button_radius, "Reiniciar", 32)
+
+                # Botón Reanudar
+                resume_color = (0, 100, 0) if pygame.Rect(current_width//2 - button_radius, button_y - button_radius, 
+                                                        button_radius*2, button_radius*2).collidepoint(mouse_pos) else (0, 70, 0)
+                resume_btn = draw_round_button(screen, resume_color, (current_width//2, button_y), button_radius, "Reanudar", 32)
+                
+                # Botón Salir
+                quit_color = (100, 0, 0) if pygame.Rect(current_width//2 - button_radius + 150, button_y - button_radius, 
+                                                    button_radius*2, button_radius*2).collidepoint(mouse_pos) else (70, 0, 0)
+                quit_btn = draw_round_button(screen, quit_color, (current_width//2 + 150, button_y), button_radius, "Salir", 32)
+                
+                # Manejar clics en los botones
+                if pygame.mouse.get_pressed()[0]:
+                    if resume_btn.collidepoint(mouse_pos):
+                            waiting_for_resume_click = True 
+                    elif restart_btn.collidepoint(mouse_pos):
+                        # Reset game
+                        player_score = 0
+                        ai_score = 0
+                        game_over = False
+                        winner = None
+                        paused = False
+                        waiting_for_resume_click = False
+                        puck.reset(zero_velocity=True)
+                        human_mallet.position = [current_width // 4, current_height // 2]
+                        human_mallet.rect.center = human_mallet.position
+                        ai_mallet.position = [current_width * 3 // 4, current_height // 2]
+                        ai_mallet.rect.center = ai_mallet.position
+                        human_mallet.velocity = [0, 0]
+                        ai_mallet.velocity = [0, 0]
+
+                    elif quit_btn.collidepoint(mouse_pos):
+                        running = False
+
         # Draw game over screen if game is over
         if game_over:
             # Semi-transparent overlay
@@ -1367,34 +1467,70 @@ def main_with_config(use_rl=False, model_path=None, screen=None, level_config=No
             # Game over text
             game_over_text = "¡Has Ganado!" if winner == "player" else "¡Has Perdido!"
             game_over_surface = font.render(game_over_text, True, WHITE)
-            game_over_rect = game_over_surface.get_rect(center=(current_width // 2, current_height // 2 - 50))
+            game_over_rect = game_over_surface.get_rect(center=(current_width // 2, current_height // 2 - 100))
             screen.blit(game_over_surface, game_over_rect)
             
-            # Draw retry button
-            button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
-            button_color = (70, 70, 70) if button_rect.collidepoint(mouse_pos) else (50, 50, 50)
-            pygame.draw.rect(screen, button_color, button_rect)
-            pygame.draw.rect(screen, WHITE, button_rect, 2)
-            retry_text = font.render("Reintentar", True, WHITE)
-            retry_rect = retry_text.get_rect(center=(current_width // 2, button_y + button_height // 2))
-            screen.blit(retry_text, retry_rect)
+            # Configuración de botones
+            button_radius = 60
+            button_y = current_height // 2 + 50
+            button_spacing = 150
             
-            # Check for button click
-            if button_rect.collidepoint(mouse_pos) and pygame.mouse.get_pressed()[0]:
-                # Reset game
-                player_score = 0
-                ai_score = 0
-                game_over = False
-                winner = None
-                puck.reset(zero_velocity=True)
-                human_mallet.position = [current_width // 4, current_height // 2]
-                human_mallet.rect.center = human_mallet.position
-                ai_mallet.position = [current_width * 3 // 4, current_height // 2]
-                ai_mallet.rect.center = ai_mallet.position
-                human_mallet.velocity = [0, 0]
-                ai_mallet.velocity = [0, 0]
-                show_reset_message = True
-                reset_message_timer = pygame.time.get_ticks()
+            # Botón Reintentar (verde)
+            retry_color = (0, 100, 0) if pygame.Rect(
+                current_width//2 - button_spacing - button_radius, 
+                button_y - button_radius, 
+                button_radius*2, 
+                button_radius*2
+            ).collidepoint(mouse_pos) else (0, 70, 0)
+            
+            retry_btn = draw_round_button(
+                screen, 
+                retry_color, 
+                (current_width//2 - button_spacing, button_y), 
+                button_radius, 
+                "Reintentar", 
+                32
+            )
+            
+            # Botón Salir (rojo)
+            quit_color = (100, 0, 0) if pygame.Rect(
+                current_width//2 + button_spacing - button_radius, 
+                button_y - button_radius, 
+                button_radius*2, 
+                button_radius*2
+            ).collidepoint(mouse_pos) else (70, 0, 0)
+            
+            quit_btn = draw_round_button(
+                screen, 
+                quit_color, 
+                (current_width//2 + button_spacing, button_y), 
+                button_radius, 
+                "Salir", 
+                32
+            )
+            
+            # Manejar clics en los botones
+            if mouse_clicked:  # Usamos la variable mouse_clicked que ya está definida
+                if retry_btn.collidepoint(mouse_pos):
+                    # Reset game
+                    player_score = 0
+                    ai_score = 0
+                    game_over = False
+                    winner = None
+                    paused = False
+                    waiting_for_resume_click = False
+                    puck.reset(zero_velocity=True)
+                    human_mallet.position = [current_width // 4, current_height // 2]
+                    human_mallet.rect.center = human_mallet.position
+                    ai_mallet.position = [current_width * 3 // 4, current_height // 2]
+                    ai_mallet.rect.center = ai_mallet.position
+                    human_mallet.velocity = [0, 0]
+                    ai_mallet.velocity = [0, 0]
+                    show_reset_message = True
+                    reset_message_timer = pygame.time.get_ticks()
+                
+                elif quit_btn.collidepoint(mouse_pos):
+                    running = False
         
         # Show model type and mode
         if use_rl:
