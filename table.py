@@ -7,6 +7,8 @@ class Table:
     def __init__(self):
         # Usar dimensiones dinámicas
         self.update_dimensions()
+        # Color por defecto de la mesa (se puede cambiar externamente)
+        self.table_color = BLACK
         
     def update_dimensions(self):
         """Actualiza las dimensiones de la mesa basándose en las constantes actuales"""
