@@ -39,36 +39,55 @@ play-level: ## Jugar un nivel específico: make play-level LEVEL=3
 		pygame.quit()"
 
 # ---------------------------------------------------------------------------
-# Entrenamiento IA
+# Entrenamiento IA  (v2: 9 acciones con diagonales)
+# ---------------------------------------------------------------------------
+# Presets disponibles:
+#   v2_quick     — ~100k steps, pruebas rápidas
+#   v2_standard  — ~500k steps, entrenamiento balanceado (default)
+#   v2_deep      — ~2M  steps, entrenamiento exhaustivo
+#   quick / standard / deep / exploration — presets legacy (4 acciones)
+#
+# Entornos:  base | powerups
+#
+# Overrides opcionales (se aplican sobre cualquier preset):
+#   --timesteps N    --epochs N       --lr F
+#   --batch-size N   --gamma F        --ent-coef F
+#   --clip-range F   --n-steps N      --n-envs N
+#   --checkpoint-freq N  --eval-freq N
 # ---------------------------------------------------------------------------
 
 .PHONY: train
-train: ## Entrenar modelo IA (preset standard)
-	uv run python -m training.train --preset standard --env base
+train: ## Entrenar modelo IA (v2_standard, ~500k steps)
+	uv run python -m training.train --preset v2_standard --env base
 
 .PHONY: train-quick
-train-quick: ## Entrenamiento rápido para pruebas
-	uv run python -m training.train --preset quick --env base
+train-quick: ## Entrenamiento rápido para pruebas (~100k steps)
+	uv run python -m training.train --preset v2_quick --env base
 
 .PHONY: train-deep
-train-deep: ## Entrenamiento profundo (largo)
-	uv run python -m training.train --preset deep --env base
+train-deep: ## Entrenamiento profundo (~2M steps)
+	uv run python -m training.train --preset v2_deep --env base
+
+.PHONY: train-powerups
+train-powerups: ## Entrenar con power-ups (obs 26-dim)
+	uv run python -m training.train --preset v2_standard --env powerups
+
+.PHONY: train-parallel
+train-parallel: ## Entrenar con 4 entornos paralelos
+	uv run python -m training.train --preset v2_standard --env base --n-envs 4
+
+.PHONY: train-custom
+train-custom: ## Entrenar con parámetros personalizados (ejemplo)
+	uv run python -m training.train --preset v2_standard --env base \
+		--timesteps 300000 --lr 3e-4 --ent-coef 0.02
 
 .PHONY: train-resume
 train-resume: ## Reanudar entrenamiento desde último checkpoint
-	uv run python -m training.train --preset standard --env base --resume auto
+	uv run python -m training.train --preset v2_standard --env base --resume auto
 
 # ---------------------------------------------------------------------------
 # Evaluación y análisis
 # ---------------------------------------------------------------------------
-
-.PHONY: test
-test: ## Ejecutar tests de integración
-	uv run python -m pytest tests/ -v
-
-.PHONY: check-models
-check-models: ## Verificar modelos disponibles y su estado
-	uv run python -m tests.check_models
 
 .PHONY: tensorboard
 tensorboard: ## Lanzar TensorBoard para ver métricas de entrenamiento
@@ -80,22 +99,24 @@ tensorboard: ## Lanzar TensorBoard para ver métricas de entrenamiento
 
 .PHONY: lint
 lint: ## Verificar estilo de código
-	uv run python -m py_compile game/main.py
-	uv run python -m py_compile game/core/game_engine.py
-	uv run python -m py_compile training/envs/base_env.py
+	@uv run python -m py_compile game/main.py
+	@uv run python -m py_compile game/core/game_engine.py
+	@uv run python -m py_compile training/envs/base_env.py
+	@uv run python -m py_compile training/train.py
+	@uv run python -m py_compile game/ai/model_loader.py
 	@echo "✓ Archivos principales compilan correctamente"
 
 .PHONY: clean
 clean: ## Limpiar archivos temporales y cachés
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	find . -not -path './.venv/*' -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -not -path './.venv/*' -type f -name "*.pyc" -delete 2>/dev/null || true
 	rm -rf .pytest_cache/
 
 .PHONY: clean-models
 clean-models: ## Eliminar modelos entrenados (¡CUIDADO!)
 	@echo "⚠️  Esto eliminará TODOS los modelos entrenados."
 	@read -p "¿Estás seguro? (y/N): " confirm && [ "$$confirm" = "y" ] && \
-		rm -rf models/ improved_models/ logs/ improved_logs/ || \
+		rm -rf models/ logs/ || \
 		echo "Cancelado."
 
 # ---------------------------------------------------------------------------
