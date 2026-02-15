@@ -86,6 +86,22 @@ train-resume: ## Reanudar entrenamiento desde último checkpoint
 	uv run python -m training.train --preset v2_standard --env base --resume auto
 
 # ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+.PHONY: test
+test: ## Ejecutar todos los tests
+	uv run pytest tests/ -v
+
+.PHONY: test-fast
+test-fast: ## Tests rápidos (excluye SB3 check_env)
+	uv run pytest tests/ -v -k "not SB3"
+
+.PHONY: test-integration
+test-integration: ## Solo tests de integración
+	uv run pytest tests/test_integration.py -v
+
+# ---------------------------------------------------------------------------
 # Evaluación y análisis
 # ---------------------------------------------------------------------------
 
