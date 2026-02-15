@@ -177,7 +177,9 @@ cython_debug/
 /saves/*
 *.json
 /saves/*.json
+game/config/saves/
 
 # AI
 .agents/
 .cursor/
+.github/agents/
