@@ -68,7 +68,8 @@ def main_with_config(screen=None, level_id=1, save_system=None, **kwargs):
     return run_game(screen, match_config, save_system)
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """CLI entry point for quick play (level 1, Player vs AI)."""
     pygame.init()
     info = pygame.display.Info()
     w = min(1200, info.current_w - 100)
@@ -76,6 +77,10 @@ if __name__ == "__main__":
     screen = pygame.display.set_mode((w, h))
     pygame.display.set_caption("Hockey Is Melting Down - Salva la Tierra")
 
-    result = run_game(screen)
+    run_game(screen)
     pygame.quit()
     sys.exit()
+
+
+if __name__ == "__main__":
+    main()
