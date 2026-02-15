@@ -1,9 +1,32 @@
 [project]
-name = "ai-enviromental-game"
-version = "0.1.0"
-description = "Add your description here"
+name = "hockey-is-melting-down"
+version = "2.0.0"
+description = "Air Hockey game with environmental themes and RL-trained AI agents (PPO/Stable-Baselines3)"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
+authors = [
+    { name = "Flavio Andres Arregoces Mercado" },
+]
+keywords = [
+    "air-hockey",
+    "reinforcement-learning",
+    "pygame",
+    "ppo",
+    "stable-baselines3",
+    "game",
+    "environment",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment :: Arcade",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
 dependencies = [
     "gymnasium>=1.1.1",
     "matplotlib>=3.10.3",
@@ -14,4 +37,24 @@ dependencies = [
     "stable-baselines3[extra]>=2.6.0",
     "tensorboard>=2.19.0",
     "torch>=2.7.0",
+]
+
+[project.urls]
+Repository = "https://github.com/flaviofuego/AI_Enviromental_Game"
+
+[project.scripts]
+hockey-play = "game.main_hub:main"
+hockey-quick = "game.main:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-timeout>=2.4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --timeout=60"
+markers = [
+    "slow: marks tests that take a long time to run",
 ]
