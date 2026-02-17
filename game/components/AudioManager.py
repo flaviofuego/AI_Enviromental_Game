@@ -29,6 +29,10 @@ class AudioManager:
         # Control de hilos para carga asíncrona
         self._loading_threads = []
         self._preload_lock = threading.Lock()
+
+        # Pending music change (non-blocking fade-out)
+        self._pending_music: tuple | None = None
+        self._MUSIC_CHANGE_EVENT: int = pygame.USEREVENT + 99
         
         # Rutas de audio predefinidas (archivos .mp3)
         self.audio_paths = {
@@ -134,32 +138,53 @@ class AudioManager:
             return
         
         try:
-            # Detener música actual con fade-out
+            # Detener música actual con fade-out (non-blocking)
             if pygame.mixer.music.get_busy():
                 pygame.mixer.music.fadeout(500)
-                time.sleep(0.5)  # Breve pausa para permitir fade-out
+                # Schedule the new track after the fade-out finishes.
+                # pygame.mixer.music.fadeout is non-blocking: the music
+                # will stop on its own after 500 ms.  We start the new
+                # track via a short timer so we don't block the main
+                # thread with time.sleep().
+                self._pending_music = (file_path, loop, fade_in_ms, music_name)
+                # Use a one-shot pygame timer event (USER event)
+                self._MUSIC_CHANGE_EVENT = pygame.USEREVENT + 99
+                pygame.time.set_timer(self._MUSIC_CHANGE_EVENT, 550, loops=1)
+                return
             
-            # Cargar y reproducir nueva música
+            # Cargar y reproducir nueva música (no se necesita fade-out)
+            self._load_and_play_music(file_path, loop, fade_in_ms, music_name)
+                
+        except Exception as e:
+            print(f"Error reproduciendo música {music_name}: {e}")
+    
+    def process_event(self, event: pygame.event.Event) -> None:
+        """Call from the main event loop to handle deferred music changes."""
+        if (event.type == self._MUSIC_CHANGE_EVENT
+                and self._pending_music is not None):
+            file_path, loop, fade_in_ms, music_name = self._pending_music
+            self._pending_music = None
+            self._load_and_play_music(file_path, loop, fade_in_ms, music_name)
+
+    def _load_and_play_music(self, file_path, loop, fade_in_ms, music_name):
+        """Internal: load and start playing music from *file_path*."""
+        try:
             if os.path.exists(file_path):
                 pygame.mixer.music.load(file_path)
                 pygame.mixer.music.set_volume(self._current_volume)
-                
                 loops = -1 if loop else 0
                 if fade_in_ms > 0:
                     pygame.mixer.music.play(loops, fade_ms=fade_in_ms)
                 else:
                     pygame.mixer.music.play(loops)
-                
                 self._current_music = music_name
                 print(f"Reproduciendo música: {music_name}")
             else:
                 print(f"Archivo de música no encontrado: {file_path}")
-                # Crear archivo de placeholder silencioso
                 self._create_placeholder_audio(file_path)
-                
         except Exception as e:
             print(f"Error reproduciendo música {music_name}: {e}")
-    
+
     def play_sound_effect(self, sound_name: str, volume_override: Optional[float] = None):
         """
         Reproducir efecto de sonido
