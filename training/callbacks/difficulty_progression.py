@@ -35,12 +35,16 @@ class DifficultyProgressionCallback(BaseCallback):
         self.best_mean_reward = -float("inf")
         self._current_level_idx = 0
 
-        # Sync training env with starting curriculum level
-        self._apply_level(CURRICULUM_LEVELS[0])
+        # Apply starting level to eval_env only (training_env not available yet)
+        self._apply_level_to_env(self.eval_env, CURRICULUM_LEVELS[0])
 
     # ------------------------------------------------------------------
     # Callback hooks
     # ------------------------------------------------------------------
+
+    def _on_training_start(self) -> None:
+        """Sync training env with the starting curriculum level."""
+        self._apply_level_to_env(self.training_env, CURRICULUM_LEVELS[self._current_level_idx])
 
     def _on_step(self) -> bool:
         if self.n_calls % self.eval_freq != 0:
@@ -93,26 +97,46 @@ class DifficultyProgressionCallback(BaseCallback):
 
     def _evaluate(self) -> CurriculumMetrics:
         """Run evaluation episodes and collect granular metrics."""
+        from stable_baselines3.common.vec_env import VecEnv
+
         rewards: list[float] = []
         goals_scored: list[int] = []
         goals_conceded: list[int] = []
         wins = 0
 
+        is_vec = isinstance(self.eval_env, VecEnv)
+
         for _ in range(self.n_eval_episodes):
-            obs, _ = self.eval_env.reset()
+            if is_vec:
+                obs = self.eval_env.reset()
+            else:
+                obs, _ = self.eval_env.reset()
             done = False
             ep_reward = 0.0
 
             while not done:
                 action, _ = self.model.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, info = self.eval_env.step(action)
-                done = terminated or truncated
-                ep_reward += reward
+                if is_vec:
+                    obs, reward, done_arr, info = self.eval_env.step(action)
+                    ep_reward += float(reward[0])
+                    done = bool(done_arr[0])
+                else:
+                    obs, reward, terminated, truncated, info = self.eval_env.step(action)
+                    ep_reward += float(reward)
+                    done = terminated or truncated
 
             rewards.append(ep_reward)
 
             # Extract scores from the unwrapped env
-            unwrapped = self.eval_env.unwrapped if hasattr(self.eval_env, "unwrapped") else self.eval_env
+            if is_vec:
+                # DummyVecEnv exposes .envs; drill through VecFrameStack/VecNormalize
+                inner = self.eval_env
+                while hasattr(inner, "venv"):
+                    inner = inner.venv
+                base_env = inner.envs[0] if hasattr(inner, "envs") else inner
+                unwrapped = getattr(base_env, "unwrapped", base_env)
+            else:
+                unwrapped = getattr(self.eval_env, "unwrapped", self.eval_env)
             ai_score = getattr(unwrapped, "ai_score", 0)
             player_score = getattr(unwrapped, "player_score", 0)
             goals_scored.append(ai_score)
@@ -138,9 +162,16 @@ class DifficultyProgressionCallback(BaseCallback):
         params = OpponentParams.from_curriculum_level(level)
 
         for env in (self.training_env, self.eval_env):
-            unwrapped = env.unwrapped if hasattr(env, "unwrapped") else env
-            if hasattr(unwrapped, "opponent"):
-                unwrapped.opponent.params = params
-                unwrapped.opponent_skill = level.opponent_skill
-            elif hasattr(unwrapped, "increase_opponent_difficulty"):
-                unwrapped.opponent_skill = level.opponent_skill
+            self._apply_level_to_env(env, level, params)
+
+    def _apply_level_to_env(self, env, level: DifficultyLevel, params=None) -> None:
+        """Apply a curriculum level to a single environment."""
+        if params is None:
+            params = OpponentParams.from_curriculum_level(level)
+
+        unwrapped = env.unwrapped if hasattr(env, "unwrapped") else env
+        if hasattr(unwrapped, "opponent"):
+            unwrapped.opponent.params = params
+            unwrapped.opponent_skill = level.opponent_skill
+        elif hasattr(unwrapped, "increase_opponent_difficulty"):
+            unwrapped.opponent_skill = level.opponent_skill
