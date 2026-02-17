@@ -11,6 +11,8 @@ def linear_schedule(initial_value: float, final_value: float = 1e-5) -> Callable
     """Linear learning rate schedule from initial_value to final_value."""
     def func(progress_remaining: float) -> float:
         return final_value + (initial_value - final_value) * progress_remaining
+    func.__name__ = f"linear({initial_value:.1e}→{final_value:.1e})"
+    func.__qualname__ = func.__name__
     return func
 
 
