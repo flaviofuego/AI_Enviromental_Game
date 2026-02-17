@@ -14,6 +14,7 @@ import random
 import pygame
 from abc import ABC, abstractmethod
 from shared.config import COLORS
+from game.components.FontCache import font_cache
 
 
 class LevelMechanic(ABC):
@@ -133,7 +134,7 @@ class UVZonesMechanic(LevelMechanic):
 
             # UV label
             if pulse > 0.8:
-                font = pygame.font.Font(None, int(18 * self.config.scale_factor))
+                font = font_cache.get(None, int(18 * self.config.scale_factor))
                 label = font.render("UV", True, (200, 160, 255, int(180 * pulse)))
                 screen.blit(label, (int(zone["x"]) - label.get_width() // 2,
                                     int(zone["y"]) - label.get_height() // 2))
@@ -385,7 +386,7 @@ class HeatWavesMechanic(LevelMechanic):
 
             # "HEAT WAVE" indicator
             if intensity > 0.3:
-                font = pygame.font.Font(None, int(20 * self.config.scale_factor))
+                font = font_cache.get(None, int(20 * self.config.scale_factor))
                 pulse = 0.5 + 0.5 * math.sin(self.total_time * 6)
                 warn_alpha = int(200 * pulse * intensity)
                 txt = font.render("HEAT WAVE", True, (255, 80, 0))
