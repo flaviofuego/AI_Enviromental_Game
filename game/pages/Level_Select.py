@@ -1,833 +1,728 @@
+"""
+Level Selection screen for Hockey Is Melting Down.
+Refactored: uses Panel, TextRenderer components for cleaner code
+and proper text-overflow handling in the level details modal.
+"""
 import pygame
 import math
 import random
-from datetime import datetime
-import time
 
 from ..config.save_system import GameSaveSystem
-from ..components.Button import Button
+from ..components.GameButton import GameButton, image_button, text_button
 from ..components.LevelThumbnail import LevelThumbnail
 from ..components.Card import Card
 from ..components.AudioManager import audio_manager
-from ..components.PopUp import PopUp, create_help_popup
+from ..components.PopUp import PopUp
+from ..components.modals import create_help_popup
+from ..components.Panel import Panel
+from ..components.TextRenderer import TextRenderer
+from ..components.FontCache import font_cache
+
+
+# ── Level definitions ────────────────────────────────────────────────
+LEVEL_DATA = [
+    {
+        "id": 1,
+        "name": "Basura en el Ártico",
+        "enemy": "SLICKWAVE",
+        "theme": "Plástico",
+        "description": (
+            "Los mares del norte están inundados de plástico. "
+            "Enfréntate a SlickWave, el emperador del plástico."
+        ),
+        "challenge": "Recicla toneladas de desechos anotando goles",
+        "icon": "🌊",
+        "color_key": "ice_blue",
+    },
+    {
+        "id": 2,
+        "name": "Agujero de Ozono",
+        "enemy": "UVBLADE",
+        "theme": "Gases CFC",
+        "description": (
+            "Los gases CFC han abierto un cráter en el cielo antártico. "
+            "UVBlade controla la radiación."
+        ),
+        "challenge": "Restaura el escudo protector anotando en las porterías moleculares",
+        "icon": "☀️",
+        "color_key": "warning_orange",
+    },
+    {
+        "id": 3,
+        "name": "Tormenta de Smog",
+        "enemy": "SMOGATRON",
+        "theme": "Aire Contaminado",
+        "description": (
+            "La niebla tóxica asfixia las ciudades. Smogatron, el emperador "
+            "del smog, bloquea el aire limpio."
+        ),
+        "challenge": "Activa los filtros de aire con cada gol para purificar la atmósfera",
+        "icon": "☁️",
+        "color_key": "smog_gray",
+    },
+    {
+        "id": 4,
+        "name": "Bosque Desvanecido",
+        "enemy": "DEFORESTIX",
+        "theme": "Deforestación",
+        "description": (
+            "Los pulmones del planeta desaparecen rápidamente. "
+            "Deforestix arrasa con todo a su paso."
+        ),
+        "challenge": "Planta miles de árboles virtuales con cada victoria",
+        "icon": "🌳",
+        "color_key": "hope_green",
+    },
+    {
+        "id": 5,
+        "name": "Isla de Calor Urbano",
+        "enemy": "HEATCORE",
+        "theme": "Calentamiento Urbano",
+        "description": (
+            "Las ciudades son hornos de asfalto. HeatCore eleva "
+            "las temperaturas a niveles insoportables."
+        ),
+        "challenge": "Enfría las ciudades con disparos certeros",
+        "icon": "🔥",
+        "color_key": "critical_red",
+    },
+]
+
 
 class LevelSelectScreen:
+    """Level-selection screen with card grid, detail panel, and ambient particles."""
+
+    # ── Colour palette ───────────────────────────────────────────────
+    COLORS = {
+        "bg_gradient_top": (173, 216, 230),
+        "bg_gradient_bottom": (120, 50, 50),
+        "ice_blue": (173, 216, 230),
+        "critical_red": (220, 50, 50),
+        "hope_green": (34, 139, 34),
+        "warning_orange": (255, 140, 0),
+        "text_white": (255, 255, 255),
+        "text_gold": (255, 215, 0),
+        "panel_dark": (20, 20, 40, 220),
+        "button_active": (0, 100, 200),
+        "button_hover": (0, 150, 255),
+        "locked_gray": (140, 140, 140),
+        "completed_green": (50, 180, 50),
+        "level_card_bg": (40, 40, 60, 200),
+        "smog_gray": (100, 100, 150),
+    }
+
+    # ── Init ─────────────────────────────────────────────────────────
+
     def __init__(self, save_system=None, screen=None):
-        # Si no se pasa una ventana, crear una nueva (compatibilidad hacia atrás)
+        # Screen
         if screen is None:
             pygame.init()
-            # Configuración de pantalla adaptativa
             info = pygame.display.Info()
             self.screen_width = min(1200, info.current_w - 100)
             self.screen_height = min(800, info.current_h - 100)
-            
-            # Detectar si es formato móvil (relación de aspecto vertical)
-            self.is_mobile = self.screen_height > self.screen_width
-            
-            self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+            self.screen = pygame.display.set_mode(
+                (self.screen_width, self.screen_height)
+            )
             pygame.display.set_caption("Hockey Is Melting Down - Selección de Niveles")
         else:
-            # Usar la ventana existente
             self.screen = screen
             self.screen_width = screen.get_width()
             self.screen_height = screen.get_height()
-            self.is_mobile = self.screen_height > self.screen_width
-        
-        # Cargar imagen de fondo
+
+        self.is_mobile = self.screen_height > self.screen_width
+
+        # Background image
         try:
-            self.background_image = pygame.image.load('game/assets/niveles/background_levels.png')
-            self.background_image = pygame.transform.scale(self.background_image, (self.screen_width, self.screen_height))
-            self.background_opacity = 200  # 0-255, donde 255 es completamente opaco
+            self.background_image = pygame.image.load(
+                "game/assets/niveles/background_levels.png"
+            )
+            self.background_image = pygame.transform.scale(
+                self.background_image, (self.screen_width, self.screen_height)
+            )
+            self.background_opacity = 200
+
+            # Pre-cache the alpha-applied background so we don't copy
+            # and set_alpha every frame.
+            self._bg_with_alpha = self.background_image.copy()
+            self._bg_with_alpha.set_alpha(self.background_opacity)
         except (pygame.error, FileNotFoundError):
-            print("No se pudo cargar el fondo del menú de niveles")
             self.background_image = None
-        
-        # Cargar sistema de guardado (o usar el proporcionado)
-        if save_system:
-            self.save_system = save_system
-        else:
-            print("Advertencia: No se proporcionó sistema de guardado. Creando uno nuevo.")
-            self.save_system = GameSaveSystem()
-        
-        # Estado actual - Usar el perfil actual del sistema de guardado
+            self._bg_with_alpha = None
+
+        # Save system
+        self.save_system = save_system if save_system else GameSaveSystem()
         self.current_profile = self.save_system.current_profile
         if not self.current_profile:
             print("Error: No hay perfil activo en el sistema de guardado")
-        self.selected_level = None
+
+        # Selection state
         self.selected_level_index = -1
+        self.selected_level = None
         self.hover_level_index = -1
         self.show_level_info = False
-        self.animate_selected = False
-        self.animation_time = 0
-        
-        # Mensajes temporales
-        self.message = ""
-        self.message_time = 0
-        self.message_type = "info"  # info, success, error
-        
-        # Colores temáticos (consistentes con home.py)
-        self.colors = {
-            'bg_gradient_top': (173, 216, 230),      # Azul espacial claro (hielo)
-            'bg_gradient_bottom': (120, 50, 50),   # Rojo apocalíptico
-            'ice_blue': (173, 216, 230),
-            'critical_red': (220, 50, 50),
-            'hope_green': (34, 139, 34),
-            'warning_orange': (255, 140, 0),
-            'text_white': (255, 255, 255),
-            'text_gold': (255, 215, 0),
-            'panel_dark': (20, 20, 40, 200),
-            'button_active': (0, 100, 200),
-            'button_hover': (0, 150, 255),
-            'locked_gray': (140, 140, 140),
-            'completed_green': (50, 180, 50),
-            'level_card_bg': (40, 40, 60, 200)
-        }
-        
-        # Fuentes
-        try:
-            self.font_title = pygame.font.Font(None, 48 if not self.is_mobile else 36)
-            self.font_subtitle = pygame.font.Font(None, 24 if not self.is_mobile else 20)
-            self.font_text = pygame.font.Font(None, 24 if not self.is_mobile else 20)
-            self.font_small = pygame.font.Font(None, 20 if not self.is_mobile else 18)
-        except:
-            self.font_title = pygame.font.SysFont('Arial', 48 if not self.is_mobile else 36, bold=True)
-            self.font_subtitle = pygame.font.SysFont('Arial', 24 if not self.is_mobile else 20, bold=True)
-            self.font_text = pygame.font.SysFont('Arial', 24 if not self.is_mobile else 20)
-            self.font_small = pygame.font.SysFont('Arial', 20 if not self.is_mobile else 18)
-        
-        # Definición de niveles
-        self.levels = [
-            {
-                'id': 1,
-                'name': "Basura en el Ártico",
-                'enemy': "SLICKWAVE",
-                'theme': "Plástico",
-                'description': "Los mares del norte están inundados de plástico. Enfréntate a SlickWave, el emperador del plástico.",
-                'challenge': "Recicla toneladas de desechos anotando goles",
-                'icon': '🌊',
-                'color': self.colors['ice_blue'],
-                'unlocked': True,  # El primer nivel siempre está desbloqueado
-                'completed': False
-            },
-            {
-                'id': 2,
-                'name': "Agujero de Ozono",
-                'enemy': "UVBLADE",
-                'theme': "Gases CFC",
-                'description': "Los gases CFC han abierto un cráter en el cielo antártico. UVBlade controla la radiación.",
-                'challenge': "Restaura el escudo protector anotando en las porterías moleculares",
-                'icon': '☀️',
-                'color': self.colors['warning_orange'],
-                'unlocked': False,
-                'completed': False
-            },
-            {
-                'id': 3,
-                'name': "Tormenta de Smog",
-                'enemy': "SMOGATRON",
-                'theme': "Aire Contaminado",
-                'description': "La niebla tóxica asfixia las ciudades. Smogatron, el emperador del smog, bloquea el aire limpio.",
-                'challenge': "Activa los filtros de aire con cada gol para purificar la atmósfera",
-                'icon': '☁️',
-                'color': (100, 100, 150),
-                'unlocked': False,
-                'completed': False
-            },
-            {
-                'id': 4,
-                'name': "Bosque Desvanecido",
-                'enemy': "DEFORESTIX",
-                'theme': "Deforestación",
-                'description': "Los pulmones del planeta desaparecen rápidamente. Deforestix arrasa con todo a su paso.",
-                'challenge': "Planta miles de árboles virtuales con cada victoria",
-                'icon': '🌳',
-                'color': self.colors['hope_green'],
-                'unlocked': False,
-                'completed': False
-            },
-            {
-                'id': 5,
-                'name': "Isla de Calor Urbano",
-                'enemy': "HEATCORE",
-                'theme': "Calentamiento Urbano",
-                'description': "Las ciudades son hornos de asfalto. HeatCore eleva las temperaturas a niveles insoportables.",
-                'challenge': "Enfría las ciudades con disparos certeros",
-                'icon': '🔥',
-                'color': self.colors['critical_red'],
-                'unlocked': False,
-                'completed': False
-            }
-        ]
-        
-        # Botones de navegación
-        button_width = 150
-        button_height = 40
-        margin = 20
-        
-        self.buttons = {
-            'back': {
-                'rect': pygame.Rect(margin, self.screen_height - button_height - margin, button_width, button_height),
-                'text': "Volver al Menú",
-                'color': self.colors['ice_blue'],
-                'hover_color': self.colors['button_hover']
-            },
-            'play': {
-                'rect': pygame.Rect(self.screen_width - button_width - margin, 
-                                   self.screen_height - button_height - margin, 
-                                   button_width, button_height),
-                'text': "¡Jugar Nivel!",
-                'color': self.colors['hope_green'],
-                'hover_color': (80, 200, 80)
-            }
-        }
-        
-        # Cargar efectos ambientales
-        self.particles = []
-        self.create_particles()
-        
-        # Inicializar reloj
-        self.clock = pygame.time.Clock()
-        
-        # Actualizar estado de los niveles según perfil
-        self.load_levels_status()
-        
-        # Inicializar cards
+        self.animation_time = 0.0
+
+        # Fonts (via FontCache)
+        m = self.is_mobile
+        self.font_title = font_cache.get(None, 48 if not m else 36)
+        self.font_subtitle = font_cache.get(None, 24 if not m else 20)
+        self.font_text = font_cache.get(None, 24 if not m else 20)
+        self.font_small = font_cache.get(None, 20 if not m else 18)
+
+        # Text renderer — used in the detail panel to prevent overflow
+        self.text_renderer = TextRenderer(self.font_small, self.COLORS["text_white"])
+
+        # Build runtime levels (add mutable state & resolved colour)
+        self.levels = []
+        for ld in LEVEL_DATA:
+            self.levels.append({
+                **ld,
+                "color": self.COLORS.get(ld["color_key"], (200, 200, 200)),
+                "unlocked": ld["id"] == 1,
+                "completed": False,
+            })
+
+        # Nav buttons (GameButton instances)
+        btn_w, btn_h, margin = 150, 40, 20
+        self.btn_back = text_button(
+            text="Volver al Menú",
+            position=(margin, self.screen_height - btn_h - margin),
+            size=(btn_w, btn_h),
+            bg_color=self.COLORS["ice_blue"],
+            hover_color=self.COLORS["button_hover"],
+            font_size=20 if not m else 18,
+        )
+        self.btn_play = text_button(
+            text="¡Jugar Nivel!",
+            position=(self.screen_width - btn_w - margin,
+                      self.screen_height - btn_h - margin),
+            size=(btn_w, btn_h),
+            bg_color=self.COLORS["hope_green"],
+            hover_color=(80, 200, 80),
+            font_size=20 if not m else 18,
+        )
+        self.btn_help = image_button(
+            asset_name="help",
+            scale=(40, 40),
+            position=(self.screen_width - 40, 40),
+            hover_text="Ayuda",
+            name="help",
+        )
+        self._nav_buttons = {"back": self.btn_back, "play": self.btn_play}
+
+        # Particles
+        self.particles = self._create_particles(30)
+
+        # Cards & thumbnail widgets
         self.cards = {}
-        for level in self.levels:
-            self.cards[level['id']] = Card(
-                max_width=400 if not self.is_mobile else self.screen_width - 40,
-                spacing=10,
-                padding=10
-            )
-            
-        # Inicializar miniaturas de niveles
         self.thumbnails = {}
         for level in self.levels:
-            self.thumbnails[level['id']] = LevelThumbnail(level['id'])
-        
-        # Precargar audio para esta pantalla
+            lid = level["id"]
+            self.cards[lid] = Card(
+                max_width=400 if not self.is_mobile else self.screen_width - 40,
+                spacing=10,
+                padding=10,
+            )
+            self.thumbnails[lid] = LevelThumbnail(lid)
+
+        # Messages
+        self.message = ""
+        self.message_time = 0
+        self.message_type = "info"
+
+        # Help popup
+        self.help_popup = None
+
+        # Clock
+        self.clock = pygame.time.Clock()
+
+        # Sync level status from profile
+        self.load_levels_status()
+
+        # Pre-load audio
         audio_manager.preload_audio_for_screen("level_select")
 
-        # Inicializar el popup de ayuda
-        self.help_popup = None
-        
+    # ── Level status sync ────────────────────────────────────────────
+
     def load_levels_status(self):
-        """Actualizar el estado de los niveles según el perfil actual"""
-        # Recargar el perfil desde el sistema de guardado para obtener cambios recientes
+        """Update level unlock/completed state from the current profile."""
         if self.save_system and self.current_profile:
             try:
-                # Recargar el perfil actual con los datos más recientes
-                updated_profile = self.save_system.load_profile(self.current_profile['profile_id'])
-                if updated_profile:
-                    self.current_profile = updated_profile
-                    print(f"✓ Perfil actualizado: {self.current_profile.get('levels', {})}")
+                updated = self.save_system.load_profile(
+                    self.current_profile["profile_id"]
+                )
+                if updated:
+                    self.current_profile = updated
             except Exception as e:
                 print(f"Error recargando perfil: {e}")
-        
+
         if self.current_profile:
-            levels_unlocked = self.current_profile.get('levels', {}).get('unlocked', 1)
-            completed_levels = self.current_profile.get('levels', {}).get('completed', [])
-            
-            print(f"Niveles desbloqueados: {levels_unlocked}")
-            print(f"Niveles completados: {completed_levels}")
-            
-            for i, level in enumerate(self.levels):
-                level['unlocked'] = level['id'] <= levels_unlocked
-                level['completed'] = level['id'] in completed_levels
-    
-    def create_particles(self):
-        """Crear partículas de fondo para el efecto ambiental"""
-        for _ in range(30):
-            self.particles.append({
-                'x': random.randint(0, self.screen_width),
-                'y': random.randint(0, self.screen_height),
-                'size': random.randint(1, 3),
-                'speed': random.uniform(0.5, 1.5),
-                'angle': random.uniform(0, 2 * math.pi),
-                'color': random.choice([
-                    self.colors['ice_blue'],
-                    self.colors['hope_green'],
-                    self.colors['warning_orange'],
-                    (100, 100, 150)  # Gris azulado
-                ])
+            unlocked = self.current_profile.get("levels", {}).get("unlocked", 1)
+            completed = self.current_profile.get("levels", {}).get("completed", [])
+            for level in self.levels:
+                level["unlocked"] = level["id"] <= unlocked
+                level["completed"] = level["id"] in completed
+
+    # ── Particles ────────────────────────────────────────────────────
+
+    def _create_particles(self, count: int) -> list[dict]:
+        particles = []
+        for _ in range(count):
+            particles.append({
+                "x": random.randint(0, self.screen_width),
+                "y": random.randint(0, self.screen_height),
+                "size": random.randint(1, 3),
+                "speed": random.uniform(0.5, 1.5),
+                "angle": random.uniform(0, 2 * math.pi),
+                "color": random.choice([
+                    self.COLORS["ice_blue"],
+                    self.COLORS["hope_green"],
+                    self.COLORS["warning_orange"],
+                    self.COLORS["smog_gray"],
+                ]),
             })
-    
-    def update_particles(self):
-        """Actualizar posición de las partículas"""
-        for particle in self.particles:
-            # Mover según ángulo y velocidad
-            particle['x'] += math.cos(particle['angle']) * particle['speed']
-            particle['y'] += math.sin(particle['angle']) * particle['speed']
-            
-            # Si sale de la pantalla, reiniciar en un borde aleatorio
-            if (particle['x'] < 0 or particle['x'] > self.screen_width or
-                particle['y'] < 0 or particle['y'] > self.screen_height):
-                # Elegir un borde aleatorio (0=arriba, 1=derecha, 2=abajo, 3=izquierda)
-                edge = random.randint(0, 3)
-                
-                if edge == 0:  # arriba
-                    particle['x'] = random.randint(0, self.screen_width)
-                    particle['y'] = 0
-                elif edge == 1:  # derecha
-                    particle['x'] = self.screen_width
-                    particle['y'] = random.randint(0, self.screen_height)
-                elif edge == 2:  # abajo
-                    particle['x'] = random.randint(0, self.screen_width)
-                    particle['y'] = self.screen_height
-                else:  # izquierda
-                    particle['x'] = 0
-                    particle['y'] = random.randint(0, self.screen_height)
-                
-                # Nuevo ángulo para que vuelva al centro
-                center_x, center_y = self.screen_width // 2, self.screen_height // 2
-                particle['angle'] = math.atan2(center_y - particle['y'], center_x - particle['x'])
-                particle['angle'] += random.uniform(-0.5, 0.5)  # Añadir algo de variación
-    
-    def draw_background(self):
-        """Dibujar fondo con gradiente y efectos"""
-        # Si hay imagen de fondo, dibujarla primero con transparencia
-        if self.background_image:
-            # Crear una copia de la imagen con la opacidad deseada
-            temp_image = self.background_image.copy()
-            temp_image.set_alpha(self.background_opacity)
-            self.screen.blit(temp_image, (0, 0))
+        return particles
+
+    def _update_particles(self):
+        for p in self.particles:
+            p["x"] += math.cos(p["angle"]) * p["speed"]
+            p["y"] += math.sin(p["angle"]) * p["speed"]
+            # Wrap around
+            if p["x"] < 0:
+                p["x"] = self.screen_width
+            elif p["x"] > self.screen_width:
+                p["x"] = 0
+            if p["y"] < 0:
+                p["y"] = self.screen_height
+            elif p["y"] > self.screen_height:
+                p["y"] = 0
+
+    # ── Drawing helpers ──────────────────────────────────────────────
+
+    def _draw_background(self):
+        if self._bg_with_alpha:
+            self.screen.blit(self._bg_with_alpha, (0, 0))
         else:
-            # Dibujar gradiente como respaldo
             for y in range(self.screen_height):
                 ratio = y / self.screen_height
-                color = [
-                    int(self.colors['bg_gradient_top'][i] * (1 - ratio) + 
-                        self.colors['bg_gradient_bottom'][i] * ratio)
+                c = [
+                    int(self.COLORS["bg_gradient_top"][i] * (1 - ratio)
+                        + self.COLORS["bg_gradient_bottom"][i] * ratio)
                     for i in range(3)
                 ]
-                pygame.draw.line(self.screen, color, (0, y), (self.screen_width, y))
-        
-        # Dibujar partículas sobre el fondo
-        for particle in self.particles:
-            particle['x'] += math.cos(particle['angle']) * particle['speed']
-            particle['y'] += math.sin(particle['angle']) * particle['speed']
-            
-            # Wraparound
-            if particle['x'] < 0:
-                particle['x'] = self.screen_width
-            elif particle['x'] > self.screen_width:
-                particle['x'] = 0
-            if particle['y'] < 0:
-                particle['y'] = self.screen_height
-            elif particle['y'] > self.screen_height:
-                particle['y'] = 0
-            
-            # Dibujar partícula con efecto de brillo
-            alpha = int(128 + 127 * math.sin(self.animation_time * 2 + particle['x'] * 0.01))
-            pygame.draw.circle(self.screen, (*particle['color'], alpha), 
-                             (int(particle['x']), int(particle['y'])), particle['size'])
+                pygame.draw.line(self.screen, c, (0, y), (self.screen_width, y))
 
-    def draw_title(self):
-        """Dibujar título de la pantalla de selección de niveles"""
+        # Particles
+        for p in self.particles:
+            alpha = int(128 + 127 * math.sin(self.animation_time * 2 + p["x"] * 0.01))
+            pygame.draw.circle(
+                self.screen,
+                (*p["color"], alpha),
+                (int(p["x"]), int(p["y"])),
+                p["size"],
+            )
+
+    def _draw_title(self):
         title_text = "SELECCIONA TU MISIÓN"
-        
-        # Posición adaptativa
         title_y = 50 if not self.is_mobile else 30
-        
-        # Efecto de brillo
-        glow_intensity = abs(math.sin(self.animation_time * 3))
-        
-        # Sombra del título
-        title_shadow = self.font_title.render(title_text, True, (0, 0, 0))
-        shadow_rect = title_shadow.get_rect(center=(self.screen_width // 2 + 2, title_y + 2))
-        self.screen.blit(title_shadow, shadow_rect)
-        
-        # Título con brillo variable
-        title_color = (
-            min(255, int(173 + 80 * glow_intensity)),
-            min(255, int(216 + 40 * glow_intensity)),
-            min(255, int(230 + 25 * glow_intensity))
+        glow = abs(math.sin(self.animation_time * 3))
+
+        # Shadow
+        shadow = self.font_title.render(title_text, True, (0, 0, 0))
+        self.screen.blit(shadow, shadow.get_rect(center=(self.screen_width // 2 + 2, title_y + 2)))
+
+        # Glowing title
+        tc = (
+            min(255, int(173 + 80 * glow)),
+            min(255, int(216 + 40 * glow)),
+            min(255, int(230 + 25 * glow)),
         )
-        
-        title_surface = self.font_title.render(title_text, True, title_color)
-        title_rect = title_surface.get_rect(center=(self.screen_width // 2, title_y))
-        self.screen.blit(title_surface, title_rect)
-        
-        # Subtítulo
-        subtitle_text = "Restaura el equilibrio climático, misión por misión"
-        subtitle_surface = self.font_subtitle.render(subtitle_text, True, self.colors['text_gold'])
-        subtitle_rect = subtitle_surface.get_rect(center=(self.screen_width // 2, title_y + 40))
-        self.screen.blit(subtitle_surface, subtitle_rect)
-        
-        # Información del perfil
+        ts = self.font_title.render(title_text, True, tc)
+        self.screen.blit(ts, ts.get_rect(center=(self.screen_width // 2, title_y)))
+
+        # Subtitle
+        sub = "Restaura el equilibrio climático, misión por misión"
+        ss = self.font_subtitle.render(sub, True, self.COLORS["text_gold"])
+        self.screen.blit(ss, ss.get_rect(center=(self.screen_width // 2, title_y + 40)))
+
+        # Profile label
         if self.current_profile:
-            profile_text = f"Agente: {self.current_profile['player_name']}"
-            profile_surface = self.font_text.render(profile_text, True, self.colors['text_white'])
-            self.screen.blit(profile_surface, (20, 20))
-    
-    def draw_level_cards(self):
-        """Dibujar tarjetas de selección de nivel"""
-        # Configuración de las tarjetas
-        if self.is_mobile:
-            cards_per_row = 1  # Móvil mantiene una columna
-            gap = 20
-            start_y = 150
-        else:
-            cards_per_row = 3  # Máximo de tarjetas por fila
-            gap = 20
-            start_y = 150
-        
-        # Calcular número de filas necesarias
+            ps = self.font_text.render(
+                f"Agente: {self.current_profile['player_name']}",
+                True,
+                self.COLORS["text_white"],
+            )
+            self.screen.blit(ps, (20, 20))
+
+    # ── Level cards ──────────────────────────────────────────────────
+
+    def _draw_level_cards(self):
+        cards_per_row = 1 if self.is_mobile else 3
+        gap = 20
+        start_y = 150
         num_rows = math.ceil(len(self.levels) / cards_per_row)
-        
-        # Dibujar cada tarjeta de nivel
+
         for i, level in enumerate(self.levels):
-            # Determinar estado y color del texto
-            if not level['unlocked']:
-                status_text = "BLOQUEADO"
-                status_color = self.colors['locked_gray']
-            elif level['completed']:
-                status_text = "COMPLETADO"
-                status_color = self.colors['completed_green']
+            # Status label
+            if not level["unlocked"]:
+                status_text, status_color = "BLOQUEADO", self.COLORS["locked_gray"]
+            elif level["completed"]:
+                status_text, status_color = "COMPLETADO", self.COLORS["completed_green"]
             else:
-                status_text = "DISPONIBLE"
-                status_color = self.colors['ice_blue']
-            
-            # Calcular posición de la tarjeta
+                status_text, status_color = "DISPONIBLE", self.COLORS["ice_blue"]
+
+            card = self.cards[level["id"]]
+
             if self.is_mobile:
-                # Para móvil, una columna centrada
-                card = self.cards[level['id']]
-                card_rect = card.draw(
-                    self.screen,
-                    (20, start_y + (card.height + gap) * i),
-                    self.thumbnails[level['id']].image,
-                    status_text,
-                    status_color,
-                    i == self.selected_level_index,
-                    abs(math.sin(self.animation_time * 10)) if i == self.selected_level_index else 0
-                )
+                pos = (20, start_y + (card.height + gap) * i)
             else:
-                # Para PC, distribuir en filas
                 row = i // cards_per_row
                 col = i % cards_per_row
-                
-                # Dibujar la tarjeta
-                card = self.cards[level['id']]
-                
-                # Si es la última fila y no está completa, centrar las tarjetas
                 if row == num_rows - 1:
-                    cards_in_last_row = len(self.levels) - (row * cards_per_row)
-                    if cards_in_last_row < cards_per_row:
-                        total_width = (card.width + gap) * cards_in_last_row - gap
-                        start_x = (self.screen_width - total_width) // 2
-                    else:
-                        total_width = (card.width + gap) * cards_per_row - gap
-                        start_x = (self.screen_width - total_width) // 2
+                    cards_last = len(self.levels) - row * cards_per_row
                 else:
-                    total_width = (card.width + gap) * cards_per_row - gap
-                    start_x = (self.screen_width - total_width) // 2
-                
-                x = start_x + (card.width + gap) * col
-                y = start_y + (card.height + gap) * row
-                
-                card_rect = card.draw(
-                    self.screen,
-                    (x, y),
-                    self.thumbnails[level['id']].image,
-                    status_text,
-                    status_color,
-                    i == self.selected_level_index,
-                    abs(math.sin(self.animation_time * 10)) if i == self.selected_level_index else 0
-                )
-            
-            # Guardar rectángulo para detección de clics
-            level['rect'] = card_rect
-    
-    def draw_level_details(self):
-        """Dibujar panel de detalles del nivel seleccionado"""
+                    cards_last = cards_per_row
+                total_w = (card.width + gap) * cards_last - gap
+                sx = (self.screen_width - total_w) // 2
+                pos = (sx + (card.width + gap) * col, start_y + (card.height + gap) * row)
+
+            card_rect = card.draw(
+                self.screen,
+                pos,
+                self.thumbnails[level["id"]].image,
+                status_text,
+                status_color,
+                i == self.selected_level_index,
+                abs(math.sin(self.animation_time * 10))
+                if i == self.selected_level_index
+                else 0,
+            )
+            level["rect"] = card_rect
+
+    # ── Level detail panel (text-overflow fix) ───────────────────────
+
+    def _draw_level_details(self):
+        """Draw the detail panel for the selected level.
+
+        Uses TextRenderer to word-wrap and clip all text sections so
+        they never overflow the panel boundaries.
+        """
         if self.selected_level_index < 0 or not self.show_level_info:
             return
-            
-        level = self.levels[self.selected_level_index]
-        
-        # Configurar panel de información
-        panel_width = 500 if not self.is_mobile else self.screen_width - 40
-        panel_height = 250
-        panel_x = (self.screen_width - panel_width) // 2
-        panel_y = self.screen_height - panel_height - 80
-        
-        # Crear panel semi-transparente
-        panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
-        panel_surface.fill((20, 20, 40, 220))
-        self.screen.blit(panel_surface, (panel_x, panel_y))
-        
-        # Borde con el color del nivel
-        pygame.draw.rect(self.screen, level['color'], (panel_x, panel_y, panel_width, panel_height), 2)
-        
-        # Título del nivel
-        title_text = f"Nivel {level['id']}: {level['name']}"
-        title_surface = self.font_subtitle.render(title_text, True, level['color'])
-        self.screen.blit(title_surface, (panel_x + 20, panel_y + 20))
-        
-        # Enemigo
-        enemy_text = f"Enemigo: {level['enemy']} - {level['theme']}"
-        enemy_surface = self.font_text.render(enemy_text, True, self.colors['text_gold'])
-        self.screen.blit(enemy_surface, (panel_x + 20, panel_y + 50))
-        
-        # Descripción
-        desc_lines = self.wrap_text(level['description'], self.font_small, panel_width - 40)
-        y_offset = 80
-        for line in desc_lines:
-            text_surface = self.font_small.render(line, True, self.colors['text_white'])
-            self.screen.blit(text_surface, (panel_x + 20, panel_y + y_offset))
-            y_offset += 20
-        
-        # Desafío
-        challenge_lines = self.wrap_text("Desafío: " + level['challenge'], self.font_small, panel_width - 40)
-        y_offset += 10
-        for line in challenge_lines:
-            text_surface = self.font_small.render(line, True, self.colors['hope_green'])
-            self.screen.blit(text_surface, (panel_x + 20, panel_y + y_offset))
-            y_offset += 20
-        
-        # Estado
-        if not level['unlocked']:
-            status_text = "¡Completa el nivel anterior para desbloquear este!"
-            status_color = self.colors['locked_gray']
-        elif level['completed']:
-            status_text = "¡Nivel completado! Puedes volver a jugarlo para mejorar tu puntuación."
-            status_color = self.colors['completed_green']
-        else:
-            status_text = "¡Nivel listo para jugar! Ayuda a restaurar el planeta."
-            status_color = self.colors['ice_blue']
-            
-        status_surface = self.font_text.render(status_text, True, status_color)
-        self.screen.blit(status_surface, (panel_x + 20, panel_y + panel_height - 40))
-    
-    def draw_buttons(self):
-        """Dibujar botones de navegación"""
-        for key, button in self.buttons.items():
-            # Ver si el mouse está sobre el botón
-            mouse_pos = pygame.mouse.get_pos()
-            is_hover = button['rect'].collidepoint(mouse_pos)
-            
-            # Elegir color según estado
-            color = button['hover_color'] if is_hover else button['color']
-            
-            # Dibujar botón
-            pygame.draw.rect(self.screen, color, button['rect'])
-            pygame.draw.rect(self.screen, self.colors['text_white'], button['rect'], 2)
-            
-            # Texto del botón
-            text_surface = self.font_text.render(button['text'], True, self.colors['text_white'])
-            text_rect = text_surface.get_rect(center=button['rect'].center)
-            self.screen.blit(text_surface, text_rect)
-            
-            # Deshabilitar botón "Jugar" si no hay nivel seleccionado o está bloqueado
-            if key == 'play':
-                if (self.selected_level_index < 0 or 
-                    not self.levels[self.selected_level_index]['unlocked']):
-                    # Dibujar overlay semi-transparente para indicar deshabilitado
-                    disabled_overlay = pygame.Surface(button['rect'].size, pygame.SRCALPHA)
-                    disabled_overlay.fill((0, 0, 0, 128))
-                    self.screen.blit(disabled_overlay, button['rect'])
-    
-    def draw_message(self):
-        """Dibujar mensaje temporal si existe"""
-        if self.message and self.message_time > 0:
-            # Verificar si el mensaje debe desaparecer (después de 3 segundos)
-            current_time = pygame.time.get_ticks()
-            if current_time - self.message_time > 3000:
-                self.message = ""
-                self.message_time = 0
-                return
-            
-            # Configurar colores según el tipo de mensaje
-            if self.message_type == "error":
-                bg_color = (220, 50, 50, 200)
-                text_color = (255, 255, 255)
-            elif self.message_type == "success":
-                bg_color = (50, 180, 50, 200)
-                text_color = (255, 255, 255)
-            else:  # info
-                bg_color = (50, 150, 200, 200)
-                text_color = (255, 255, 255)
-            
-            # Crear superficie del mensaje
-            message_surface = self.font_text.render(self.message, True, text_color)
-            
-            # Configurar dimensiones y posición
-            padding = 20
-            message_width = message_surface.get_width() + (padding * 2)
-            message_height = message_surface.get_height() + (padding * 2)
-            
-            message_x = (self.screen_width - message_width) // 2
-            message_y = 100  # Mostrar en la parte superior
-            
-            # Crear panel del mensaje
-            panel_surface = pygame.Surface((message_width, message_height), pygame.SRCALPHA)
-            panel_surface.fill(bg_color)
-            
-            # Dibujar borde
-            pygame.draw.rect(panel_surface, text_color, 
-                           (0, 0, message_width, message_height), 2)
-            
-            # Dibujar texto
-            text_x = padding
-            text_y = padding
-            panel_surface.blit(message_surface, (text_x, text_y))
-            
-            # Dibujar en pantalla
-            self.screen.blit(panel_surface, (message_x, message_y))
 
-    def wrap_text(self, text, font, max_width):
-        """Dividir texto en múltiples líneas si es necesario"""
-        words = text.split(' ')
-        lines = []
-        current_line = []
-        
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            test_surface = font.render(test_line, True, (255, 255, 255))
-            
-            if test_surface.get_width() <= max_width:
-                current_line.append(word)
-            else:
-                if current_line:
-                    lines.append(' '.join(current_line))
-                current_line = [word]
-        
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        return lines
-    
+        level = self.levels[self.selected_level_index]
+
+        # Panel geometry
+        pw = 500 if not self.is_mobile else self.screen_width - 40
+        ph = 250
+        px = (self.screen_width - pw) // 2
+        py = self.screen_height - ph - 80
+
+        # Draw panel using Panel component
+        panel = Panel(
+            px, py, pw, ph,
+            bg_color=self.COLORS["panel_dark"],
+            border_color=level["color"],
+            border_width=2,
+            title=f"Nivel {level['id']}: {level['name']}",
+            title_font=self.font_subtitle,
+            title_color=level["color"],
+        )
+        panel.draw(self.screen)
+
+        cr = panel.content_rect
+        content_w = cr.width - 10  # small inset
+        y_cursor = cr.y
+
+        # Enemy info line
+        enemy_text = f"Enemigo: {level['enemy']} - {level['theme']}"
+        enemy_surf = self.font_text.render(enemy_text, True, self.COLORS["text_gold"])
+        if y_cursor + enemy_surf.get_height() <= cr.bottom:
+            self.screen.blit(enemy_surf, (cr.x, y_cursor))
+        y_cursor += enemy_surf.get_height() + 8
+
+        # Remaining vertical space for wrapped text sections
+        remaining = cr.bottom - y_cursor - 35  # reserve 35px for status line
+        if remaining < 20:
+            remaining = 20
+
+        # Allocate space: description gets 60%, challenge gets 40%
+        desc_budget = int(remaining * 0.6)
+        challenge_budget = remaining - desc_budget
+
+        # Description (word-wrapped, clipped)
+        consumed = self.text_renderer.render_text(
+            self.screen,
+            level["description"],
+            cr.x, y_cursor,
+            content_w,
+            max_height=desc_budget,
+            color=self.COLORS["text_white"],
+        )
+        y_cursor += consumed + 6
+
+        # Challenge (word-wrapped, clipped)
+        consumed = self.text_renderer.render_text(
+            self.screen,
+            "Desafío: " + level["challenge"],
+            cr.x, y_cursor,
+            content_w,
+            max_height=challenge_budget,
+            color=self.COLORS["hope_green"],
+        )
+
+        # Status line — always at bottom of panel
+        if not level["unlocked"]:
+            st_text = "¡Completa el nivel anterior para desbloquear este!"
+            st_color = self.COLORS["locked_gray"]
+        elif level["completed"]:
+            st_text = "¡Nivel completado! Puedes volver a jugarlo."
+            st_color = self.COLORS["completed_green"]
+        else:
+            st_text = "¡Nivel listo para jugar! Ayuda a restaurar el planeta."
+            st_color = self.COLORS["ice_blue"]
+
+        # Wrap status text too so it doesn't overflow horizontally
+        status_lines = self.text_renderer.wrap_text(st_text, content_w)
+        status_y = py + ph - 15 - len(status_lines) * (self.font_small.get_linesize() + 4)
+        self.text_renderer.render_lines(
+            self.screen, status_lines,
+            cr.x, max(status_y, y_cursor + 10),
+            max_height=30,
+            color=st_color,
+        )
+
+    # ── Nav buttons ──────────────────────────────────────────────────
+
+    def _draw_buttons(self):
+        for btn in self._nav_buttons.values():
+            btn.draw(self.screen)
+
+        # Disable overlay for play when no valid level
+        if self.selected_level_index < 0 or not self.levels[self.selected_level_index]["unlocked"]:
+            overlay = pygame.Surface(self.btn_play.base_rect.size, pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 128))
+            self.screen.blit(overlay, self.btn_play.base_rect)
+
+    # ── Messages ─────────────────────────────────────────────────────
+
     def show_message(self, message, message_type="info"):
-        """Mostrar mensaje temporal"""
         self.message = message
         self.message_type = message_type
         self.message_time = pygame.time.get_ticks()
-    
-    def start_level(self, level_id):
-        """
-        Función para iniciar un nivel específico del juego
-        
-        Args:
-            level_id (int): ID del nivel a iniciar
-            
-        Returns:
-            str: Resultado del juego o None si hay error
-        """
-        try:
-            # Importar la función de integración del juego principal
-            import os
-            import sys
-            
-            # Obtener la ruta del directorio raíz del proyecto
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            root_dir = os.path.dirname(os.path.dirname(current_dir))
-            
-            # Agregar la ruta al path para poder importar main_improved
-            if root_dir not in sys.path:
-                sys.path.append(root_dir)
-            
-            from game.main_hub import start_game
-            
-            # Verificar que el nivel existe y está desbloqueado
-            level_data = None
-            for level in self.levels:
-                if level['id'] == level_id:
-                    level_data = level
-                    break
-            
-            if not level_data:
-                self.show_message(f"Error: Nivel {level_id} no encontrado", "error")
-                return None
-            
-            if not level_data['unlocked']:
-                self.show_message("Nivel bloqueado. Completa el nivel anterior.", "error")
-                return None
-            
-            # Mostrar mensaje de carga
-            self.show_message(f"Iniciando {level_data['name']}...", "info")
-            self.draw_background()
-            self.draw_title()
-            self.draw_level_cards()
-            self.draw_buttons()
-            self.draw_message()
-            pygame.display.flip()
-            
-            # Pausa breve para mostrar el mensaje
-            pygame.time.wait(500)
-              # Iniciar el nivel seleccionado
-            level_config = {
-                'level_id': level_id,
-                'name': level_data['name'],
-                'enemy': level_data.get('enemy', 'IA')
-            }
-            
-            # Llamar al juego con la configuración del nivel
-            result = start_game(
-                use_rl=True,  # Usar RL para IA más inteligente
-                screen=self.screen,
-                level_config={'level_id': level_id},
-                save_system=self.save_system
-            )
-            
-            print(f"Resultado del juego: {result}")
-            
-            # Actualizar el estado del nivel después del juego
-            self.load_levels_status()
-            
-            # Mostrar resultado
-            if result and isinstance(result, dict):
-                if result.get('victory', False):
-                    self.show_message(f"¡Felicidades! Has completado {level_data['name']}", "success")
-                    print(f"✓ Nivel {level_id} completado exitosamente")
+
+    def _draw_message(self):
+        if not self.message or self.message_time == 0:
+            return
+        if pygame.time.get_ticks() - self.message_time > 3000:
+            self.message = ""
+            self.message_time = 0
+            return
+
+        type_colors = {
+            "error": (220, 50, 50, 200),
+            "success": (50, 180, 50, 200),
+            "info": (50, 150, 200, 200),
+        }
+        bg_col = type_colors.get(self.message_type, type_colors["info"])
+        text_col = (255, 255, 255)
+
+        ms = self.font_text.render(self.message, True, text_col)
+        pad = 20
+        mw, mh = ms.get_width() + pad * 2, ms.get_height() + pad * 2
+        mx = (self.screen_width - mw) // 2
+        my = 100
+
+        panel = pygame.Surface((mw, mh), pygame.SRCALPHA)
+        panel.fill(bg_col)
+        pygame.draw.rect(panel, text_col, (0, 0, mw, mh), 2)
+        panel.blit(ms, (pad, pad))
+        self.screen.blit(panel, (mx, my))
+
+    # ── Event handling ───────────────────────────────────────────────
+
+    def _handle_click(self, pos):
+        # Level card clicks
+        for i, level in enumerate(self.levels):
+            if "rect" in level and level["rect"].collidepoint(pos):
+                if level["unlocked"]:
+                    audio_manager.play_sound_effect("button_click")
+                    self.selected_level_index = i
+                    self.selected_level = level
+                    self.show_level_info = True
+                    return True
                 else:
-                    self.show_message(f"Intenta de nuevo. {level_data['name']} te espera.", "info")
+                    audio_manager.play_sound_effect("button_click", volume_override=0.2)
+                    self.show_message(
+                        "Este nivel está bloqueado. ¡Completa los niveles anteriores!",
+                        "error",
+                    )
+                    return False
+
+        # Click on empty space — dismiss detail
+        self.show_level_info = False
+        return False
+
+    def _handle_hover(self, pos):
+        old = self.hover_level_index
+        self.hover_level_index = -1
+        for i, level in enumerate(self.levels):
+            if "rect" in level and level["rect"].collidepoint(pos):
+                self.hover_level_index = i
+                if old != i and level["unlocked"]:
+                    audio_manager.play_sound_effect("button_hover", volume_override=0.2)
+                return
+
+    # ── Start level ──────────────────────────────────────────────────
+
+    def start_level(self, level_id):
+        """Launch a level via main_hub.start_game."""
+        level_data = None
+        for lv in self.levels:
+            if lv["id"] == level_id:
+                level_data = lv
+                break
+
+        if not level_data:
+            self.show_message(f"Error: Nivel {level_id} no encontrado", "error")
+            return None
+        if not level_data["unlocked"]:
+            self.show_message("Nivel bloqueado. Completa el nivel anterior.", "error")
+            return None
+
+        self.show_message(f"Iniciando {level_data['name']}...", "info")
+        self._draw_background()
+        self._draw_title()
+        self._draw_level_cards()
+        self._draw_buttons()
+        self._draw_message()
+        pygame.display.flip()
+        pygame.time.wait(500)
+
+        try:
+            from game.main_hub import start_game
+
+            result = start_game(
+                use_rl=True,
+                screen=self.screen,
+                level_config={"level_id": level_id},
+                save_system=self.save_system,
+            )
+            print(f"Resultado del juego: {result}")
+            self.load_levels_status()
+
+            if result and isinstance(result, dict):
+                if result.get("victory", False):
+                    self.show_message(
+                        f"¡Felicidades! Has completado {level_data['name']}",
+                        "success",
+                    )
+                else:
+                    self.show_message(
+                        f"Intenta de nuevo. {level_data['name']} te espera.",
+                        "info",
+                    )
             else:
                 self.show_message("Juego cancelado", "info")
-            
+
             return result
-            
+
         except ImportError as e:
-            self.show_message(f"Error: No se pudo cargar el juego principal: {e}", "error")
+            self.show_message(f"Error: No se pudo cargar el juego: {e}", "error")
             return None
         except Exception as e:
             self.show_message(f"Error inesperado: {e}", "error")
             return None
 
-    def handle_click(self, pos):
-        """Manejar clics del mouse"""
-        # Comprobar clics en niveles
-        for i, level in enumerate(self.levels):
-            if 'rect' in level and level['rect'].collidepoint(pos):
-                if level['unlocked']:
-                    # Reproducir sonido de selección
-                    audio_manager.play_sound_effect("button_click")
-                    
-                    self.selected_level_index = i
-                    self.selected_level = level
-                    self.show_level_info = True
-                    self.animate_selected = True
-                    return True
-                else:
-                    # Sonido de error para nivel bloqueado
-                    audio_manager.play_sound_effect("button_click", volume_override=0.2)
-                    self.show_message("Este nivel está bloqueado. ¡Completa los niveles anteriores primero!", "error")
-                    return False
-          # Comprobar clics en botones
-        for key, button in self.buttons.items():
-            if button['rect'].collidepoint(pos):
-                # Reproducir sonido de botón
-                audio_manager.play_sound_effect("button_click")
-                
-                if key == 'back':
-                    # Volver al menú principal
-                    return 'back_to_menu'
-                elif key == 'play':
-                    # Verificar que hay nivel seleccionado y está desbloqueado
-                    if (self.selected_level_index >= 0 and 
-                        self.levels[self.selected_level_index]['unlocked']):
-                        level_id = self.levels[self.selected_level_index]['id']
-                        # Iniciar el nivel directamente
-                        result = self.start_level(level_id)
-                        # Si fue exitoso, no retornar nada para mantener la pantalla de selección abierta
-                        return None
-                    else:
-                        self.show_message("Selecciona un nivel disponible para jugar", "error")
-                        return False
-                elif key == 'help':
-                    # Mostrar popup de ayuda
-                    self.help_popup = create_help_popup(self.screen, "level_select")
-                    self.help_popup.show()
-                    return False
-        
-        # Clic en espacio vacío
-        self.show_level_info = False
-        self.animate_selected = False
-        return False
-    
-    def handle_hover(self, pos):
-        """Manejar hover sobre elementos"""
-        # Reset hover state
-        old_hover = self.hover_level_index
-        self.hover_level_index = -1
-        
-        # Check hover over levels
-        for i, level in enumerate(self.levels):
-            if 'rect' in level and level['rect'].collidepoint(pos):
-                self.hover_level_index = i
-                # Reproducir sonido de hover si cambió
-                if old_hover != i and level['unlocked']:
-                    audio_manager.play_sound_effect("button_hover", volume_override=0.2)
-                return
-    
+    # ── Backward compat helper ───────────────────────────────────────
+
+    def wrap_text(self, text, font, max_width):
+        """Legacy wrap — delegates to TextRenderer."""
+        tr = TextRenderer(font, self.COLORS["text_white"])
+        return tr.wrap_text(text, max_width)
+
+    # ── Main loop ────────────────────────────────────────────────────
+
     def run(self):
-        """Bucle principal"""
         running = True
         result = None
 
-        help_button = Button('help', (40, 40), (self.screen_width - 40, 40), "Ayuda")
-
         while running:
-            dt = self.clock.tick(60) / 1000.0  # Delta time en segundos
+            dt = self.clock.tick(60) / 1000.0
             self.animation_time += dt
-            
-            # Actualizar partículas
-            self.update_particles()
+            self._update_particles()
 
-            # Actualizar popup si existe
+            # Popup update
             if self.help_popup:
-                popup_result = self.help_popup.update(dt)
-                if popup_result == "closed":
+                pr = self.help_popup.update(dt)
+                if pr == "closed":
                     self.help_popup = None
-            
-            # Procesar eventos
+
+            # Events
             for event in pygame.event.get():
+                audio_manager.process_event(event)
+
                 if event.type == pygame.QUIT:
-                    return "exit"  # Retornar "exit" directamente en lugar de volver al menú
-                
-                # Manejar eventos del popup si está visible
+                    return "exit"
+
                 if self.help_popup and self.help_popup.is_visible():
-                    popup_action = self.help_popup.handle_event(event)
-                    if popup_action == "more_info":
-                        # Aquí podrías implementar alguna acción adicional
-                        pass
-                    continue  # Si el popup está visible, no procesar otros eventos
-                    
+                    self.help_popup.handle_event(event)
+                    continue
 
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:  # Clic izquierdo
-                        action = self.handle_click(event.pos)
-                        if action and isinstance(action, str):
-                            result = action
-                            running = False
+                # Dispatch to GameButton nav buttons
+                if self.btn_back.update(event, dt):
+                    result = "back_to_menu"
+                    running = False
+                    continue
+                if self.btn_play.update(event, dt):
+                    if (
+                        self.selected_level_index >= 0
+                        and self.levels[self.selected_level_index]["unlocked"]
+                    ):
+                        lid = self.levels[self.selected_level_index]["id"]
+                        self.start_level(lid)
+                    else:
+                        self.show_message(
+                            "Selecciona un nivel disponible para jugar", "error")
+                    continue
+                if self.btn_help.update(event, dt):
+                    self.help_popup = create_help_popup(self.screen, "level_select")
+                    self.help_popup.show()
+                    continue
+
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    action = self._handle_click(event.pos)
+                    if isinstance(action, str):
+                        result = action
+                        running = False
                 elif event.type == pygame.MOUSEMOTION:
-                    self.handle_hover(event.pos)
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        return "exit"  # Salir del juego con la tecla Escape
-            
-            # Dibujar pantalla
-            self.draw_background()
-            self.draw_title()
-            self.draw_level_cards()
-            if self.show_level_info:
-                self.draw_level_details()
-            self.draw_buttons()
-            help_button.draw(self.screen)
-            if help_button.is_clicked(pygame.mouse.get_pos()):
-                self.help_popup = create_help_popup(self.screen, "level_select")
-                self.help_popup.show()
-            self.draw_message()
+                    self._handle_hover(event.pos)
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    return "exit"
 
-            # Dibujar popup de ayuda si está visible
+            # Advance hover animations
+            self.btn_back.update_animation(dt)
+            self.btn_play.update_animation(dt)
+            self.btn_help.update_animation(dt)
+
+            # Draw
+            self._draw_background()
+            self._draw_title()
+            self._draw_level_cards()
+            if self.show_level_info:
+                self._draw_level_details()
+            self._draw_buttons()
+            self.btn_help.draw(self.screen)
+            self._draw_message()
             if self.help_popup:
                 self.help_popup.draw()
-            
-            # Actualizar pantalla
+
             pygame.display.flip()
-        
+
         return result
 
-# Función para ejecutar la pantalla de forma independiente (pruebas)
+
+# Standalone test
 if __name__ == "__main__":
     screen = LevelSelectScreen()
     result = screen.run()
