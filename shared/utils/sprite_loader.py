@@ -1,8 +1,11 @@
 """
 Sprite loading utility — loads images with error handling and scaling.
 """
+import logging
 import os
 import pygame
+
+logger = logging.getLogger(__name__)
 
 
 class SpriteLoader:
@@ -17,6 +20,7 @@ class SpriteLoader:
         """
         try:
             if not os.path.exists(image_path):
+                logger.warning("Sprite not found: %s", image_path)
                 return None
             image = pygame.image.load(image_path).convert_alpha()
             if target_size is None:
@@ -29,7 +33,8 @@ class SpriteLoader:
                     image, (int(iw * scale), int(ih * scale))
                 )
             return pygame.transform.smoothscale(image, target_size)
-        except Exception:
+        except Exception as exc:
+            logger.error("Failed to load sprite '%s': %s", image_path, exc)
             return None
 
     @staticmethod
@@ -47,6 +52,8 @@ class SpriteLoader:
         cfg = config or GameConfig()
         sprites = {}
         sf = cfg.scale_factor
+
+        logger.info("Loading sprites for level %d (scale=%.2f)", level_id, sf)
 
         bg_path = get_asset_path(level_id, "background.png")
         if os.path.exists(bg_path):
@@ -75,7 +82,13 @@ class SpriteLoader:
                 s = SpriteLoader.load_sprite(p)
                 if s:
                     sprites[key] = s
+                    logger.info("  Loaded %s: %s (%dx%d)", key, p, *s.get_size())
+                else:
+                    logger.warning("  Failed to load %s from %s", key, p)
+            else:
+                logger.warning("  Goal sprite missing: %s", p)
 
+        logger.info("Level %d sprites loaded: %s", level_id, list(sprites.keys()))
         return sprites
 
     @staticmethod

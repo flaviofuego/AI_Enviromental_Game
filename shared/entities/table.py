@@ -1,12 +1,29 @@
 """
 Hockey table: draws the playing field, goals, and checks for goals/collisions.
+
+Rendering is optimised via pre-cached surfaces so that ``draw()`` never
+calls ``pygame.transform`` or creates temporary ``Surface`` objects.
 """
+import logging
 import pygame
 from shared.config import GameConfig, PhysicsConfig, COLORS
 
+logger = logging.getLogger(__name__)
+
+# Aspect ratio shared by all goal-post sprites (width / height).
+_GOAL_SPRITE_ASPECT = 520 / 949
+# Fraction of the rendered goal width used for the physics hitbox depth.
+_GOAL_HITBOX_DEPTH_RATIO = 0.3
+
 
 class Table:
-    """Represents the air-hockey table surface."""
+    """Represents the air-hockey table surface.
+
+    **SRP contract**
+    - ``set_goal_sprites`` / ``_compute_goal_cache``: prepare visual + hitbox data (run once).
+    - ``draw``: blit pre-cached surfaces only (run every frame — zero allocations).
+    - ``is_goal`` / ``check_goal_collision``: pure physics queries, no rendering.
+    """
 
     def __init__(self, config: GameConfig = None, physics: PhysicsConfig = None):
         self.config = config or GameConfig()
@@ -14,11 +31,39 @@ class Table:
         self._update_dimensions()
 
         self.table_color = COLORS.BLACK
-        self.goal_left_sprite = None
-        self.goal_right_sprite = None
-        self.goal_left_hitbox = None
-        self.goal_right_hitbox = None
+
+        # Raw source sprites (kept for invalidation / resize)
+        self._goal_left_src: pygame.Surface | None = None
+        self._goal_right_src: pygame.Surface | None = None
+
+        # Pre-scaled, ready-to-blit goal surfaces + positions
+        self._goal_left_scaled: pygame.Surface | None = None
+        self._goal_right_scaled: pygame.Surface | None = None
+        self._goal_left_pos: tuple[int, int] = (0, 0)
+        self._goal_right_pos: tuple[int, int] = (0, 0)
+
+        # Hitboxes (computed once, reused by physics)
+        self.goal_left_hitbox: pygame.Rect | None = None
+        self.goal_right_hitbox: pygame.Rect | None = None
+
+        # Cached fallback surfaces (used when no sprite is set)
+        self._fallback_left: pygame.Surface | None = None
+        self._fallback_right: pygame.Surface | None = None
+        self._fallback_left_pos: tuple[int, int] = (0, 0)
+        self._fallback_right_pos: tuple[int, int] = (0, 0)
+
+        # Cached decorative surfaces so ``draw()`` allocates nothing
+        self._glow_surfaces: list[tuple[pygame.Surface, tuple[int, int]]] = []
+        self._border_glow_surfaces: list[tuple[pygame.Surface, tuple[int, int]]] = []
+        self._debug_left: pygame.Surface | None = None
+        self._debug_right: pygame.Surface | None = None
+
         self.debug_mode = False
+        self._cache_valid = False
+
+    # ------------------------------------------------------------------
+    # Dimension helpers
+    # ------------------------------------------------------------------
 
     def _update_dimensions(self):
         c = self.config
@@ -29,15 +74,143 @@ class Table:
         self.goal_y1 = c.height * (1 - self.physics.goal_width_ratio) / 2
         self.goal_y2 = c.height * (1 + self.physics.goal_width_ratio) / 2
 
-    def set_goal_sprites(self, left_sprite, right_sprite):
-        self.goal_left_sprite = left_sprite
-        self.goal_right_sprite = right_sprite
+    # Backward-compatible read-only properties
+    @property
+    def goal_left_sprite(self):
+        return self._goal_left_src
+
+    @property
+    def goal_right_sprite(self):
+        return self._goal_right_src
 
     # ------------------------------------------------------------------
-    # Drawing
+    # Sprite / cache management
+    # ------------------------------------------------------------------
+
+    def set_goal_sprites(self, left_sprite: pygame.Surface | None,
+                         right_sprite: pygame.Surface | None) -> None:
+        """Assign goal sprites and pre-compute all cached surfaces + hitboxes.
+
+        Call this **once** after loading level assets.  ``draw()`` will
+        then only blit the pre-computed surfaces.
+        """
+        self._goal_left_src = left_sprite
+        self._goal_right_src = right_sprite
+        self._rebuild_cache()
+        logger.info(
+            "Goal sprites set — left=%s  right=%s",
+            f"{left_sprite.get_size()}" if left_sprite else "None",
+            f"{right_sprite.get_size()}" if right_sprite else "None",
+        )
+
+    def invalidate_cache(self) -> None:
+        """Force full cache rebuild on next ``draw()``."""
+        self._cache_valid = False
+
+    def _rebuild_cache(self) -> None:
+        """Pre-compute every surface that ``draw()`` needs."""
+        W, H = self.config.width, self.config.height
+        gh = int(self.goal_y2 - self.goal_y1)
+        goal_depth = max(5, int(10 * self.config.scale_factor))
+
+        # --- Goal sprites (scaled) + hitboxes ---
+        self._compute_goal_left_cache(W, gh, goal_depth)
+        self._compute_goal_right_cache(W, gh, goal_depth)
+
+        # --- Decorative glow for fallback goals ---
+        self._glow_surfaces.clear()
+        if self._goal_left_src is None and self._goal_right_src is None:
+            for i in range(3):
+                alpha = 80 - i * 25
+                if alpha <= 0:
+                    continue
+                sw, sh = goal_depth + i * 2, gh + i * 4
+                s_left = pygame.Surface((sw, sh), pygame.SRCALPHA)
+                pygame.draw.rect(s_left, (255, 0, 0, alpha), (0, 0, sw, sh), 1)
+                s_right = pygame.Surface((sw, sh), pygame.SRCALPHA)
+                pygame.draw.rect(s_right, (0, 255, 0, alpha), (0, 0, sw, sh), 1)
+                self._glow_surfaces.append((s_left, (-i, int(self.goal_y1) - i * 2)))
+                self._glow_surfaces.append((s_right, (W - goal_depth - i, int(self.goal_y1) - i * 2)))
+
+        # --- Border glow ---
+        self._border_glow_surfaces.clear()
+        for i in range(5):
+            a = 100 - i * 20
+            if a > 0:
+                s = pygame.Surface((W, H), pygame.SRCALPHA)
+                pygame.draw.rect(s, (255, 255, 255, a), (i, i, W - 2 * i, H - 2 * i), 1)
+                self._border_glow_surfaces.append((s, (0, 0)))
+
+        # --- Debug overlays ---
+        self._build_debug_surfaces()
+
+        self._cache_valid = True
+
+    # --- per-goal cache builders ---
+
+    def _compute_goal_left_cache(self, W: int, gh: int, goal_depth: int) -> None:
+        if self._goal_left_src is not None:
+            tw = int(gh * _GOAL_SPRITE_ASPECT)
+            self._goal_left_scaled = pygame.transform.smoothscale(self._goal_left_src, (tw, gh))
+            self._goal_left_pos = (0, int(self.goal_y1))
+            gd = int(tw * _GOAL_HITBOX_DEPTH_RATIO)
+            self.goal_left_hitbox = pygame.Rect(0, int(self.goal_y1), gd, gh)
+        else:
+            s = pygame.Surface((goal_depth, gh), pygame.SRCALPHA)
+            s.fill((255, 0, 0, 50))
+            # Burn lines directly onto the fallback surface
+            pygame.draw.line(s, COLORS.NEON_RED, (0, 0), (goal_depth, 0), 3)
+            pygame.draw.line(s, COLORS.NEON_RED, (0, gh - 1), (goal_depth, gh - 1), 3)
+            pygame.draw.line(s, COLORS.NEON_RED, (goal_depth - 1, 0), (goal_depth - 1, gh), 3)
+            self._fallback_left = s
+            self._fallback_left_pos = (0, int(self.goal_y1))
+            self._goal_left_scaled = None
+            self.goal_left_hitbox = pygame.Rect(0, int(self.goal_y1), goal_depth, gh)
+
+    def _compute_goal_right_cache(self, W: int, gh: int, goal_depth: int) -> None:
+        if self._goal_right_src is not None:
+            tw = int(gh * _GOAL_SPRITE_ASPECT)
+            self._goal_right_scaled = pygame.transform.smoothscale(self._goal_right_src, (tw, gh))
+            self._goal_right_pos = (W - tw, int(self.goal_y1))
+            gd = int(tw * _GOAL_HITBOX_DEPTH_RATIO)
+            self.goal_right_hitbox = pygame.Rect(W - gd, int(self.goal_y1), gd, gh)
+        else:
+            s = pygame.Surface((goal_depth, gh), pygame.SRCALPHA)
+            s.fill((0, 255, 0, 50))
+            pygame.draw.line(s, COLORS.NEON_GREEN, (0, 0), (goal_depth, 0), 3)
+            pygame.draw.line(s, COLORS.NEON_GREEN, (0, gh - 1), (goal_depth, gh - 1), 3)
+            pygame.draw.line(s, COLORS.NEON_GREEN, (0, 0), (0, gh), 3)
+            self._fallback_right = s
+            self._fallback_right_pos = (W - goal_depth, int(self.goal_y1))
+            self._goal_right_scaled = None
+            self.goal_right_hitbox = pygame.Rect(W - goal_depth, int(self.goal_y1), goal_depth, gh)
+
+    def _build_debug_surfaces(self) -> None:
+        if self.goal_left_hitbox:
+            ds = pygame.Surface(self.goal_left_hitbox.size, pygame.SRCALPHA)
+            ds.fill((255, 0, 0, 80))
+            pygame.draw.rect(ds, COLORS.RED, (0, 0, *self.goal_left_hitbox.size), 2)
+            self._debug_left = ds
+        if self.goal_right_hitbox:
+            ds = pygame.Surface(self.goal_right_hitbox.size, pygame.SRCALPHA)
+            ds.fill((0, 255, 0, 80))
+            pygame.draw.rect(ds, COLORS.GREEN, (0, 0, *self.goal_right_hitbox.size), 2)
+            self._debug_right = ds
+
+    # ------------------------------------------------------------------
+    # Drawing (zero-allocation hot path)
     # ------------------------------------------------------------------
 
     def draw(self, screen, draw_background=True, debug_mode=False):
+        """Render the table by blitting pre-cached surfaces only.
+
+        On the first call (or after ``invalidate_cache()``), surfaces are
+        rebuilt automatically so callers that never call ``set_goal_sprites``
+        still get correct fallback rendering + hitboxes.
+        """
+        if not self._cache_valid:
+            self._rebuild_cache()
+
         W, H = self.config.width, self.config.height
         self.debug_mode = debug_mode
 
@@ -48,88 +221,36 @@ class Table:
         pygame.draw.line(screen, COLORS.WHITE, (W // 2, 0), (W // 2, H), self.line_width)
         pygame.draw.circle(screen, COLORS.WHITE, (W // 2, H // 2), self.center_radius, self.line_width)
 
-        goal_depth = max(5, int(10 * self.config.scale_factor))
+        # Goals — blit pre-cached surfaces (no transform, no Surface creation)
+        if self._goal_left_scaled is not None:
+            screen.blit(self._goal_left_scaled, self._goal_left_pos)
+        elif self._fallback_left is not None:
+            screen.blit(self._fallback_left, self._fallback_left_pos)
 
-        # Left goal
-        self._draw_goal_left(screen, W, H, goal_depth)
-        # Right goal
-        self._draw_goal_right(screen, W, H, goal_depth)
+        if self._goal_right_scaled is not None:
+            screen.blit(self._goal_right_scaled, self._goal_right_pos)
+        elif self._fallback_right is not None:
+            screen.blit(self._fallback_right, self._fallback_right_pos)
 
-        # Glow effect on default goals
-        if self.goal_left_sprite is None and self.goal_right_sprite is None:
-            for i in range(3):
-                alpha = 80 - i * 25
-                if alpha <= 0:
-                    continue
-                gh = int(self.goal_y2 - self.goal_y1)
-                s = pygame.Surface((goal_depth + i * 2, gh + i * 4), pygame.SRCALPHA)
-                pygame.draw.rect(s, (255, 0, 0, alpha), (0, 0, s.get_width(), s.get_height()), 1)
-                screen.blit(s, (-i, int(self.goal_y1) - i * 2))
-                s2 = pygame.Surface((goal_depth + i * 2, gh + i * 4), pygame.SRCALPHA)
-                pygame.draw.rect(s2, (0, 255, 0, alpha), (0, 0, s2.get_width(), s2.get_height()), 1)
-                screen.blit(s2, (W - goal_depth - i, int(self.goal_y1) - i * 2))
+        # Glow effect on default goals (pre-cached surfaces)
+        for surf, pos in self._glow_surfaces:
+            screen.blit(surf, pos)
 
         # Border
         pygame.draw.rect(screen, COLORS.WHITE, (0, 0, W, H), self.line_width)
 
-        # Border glow
-        for i in range(5):
-            a = 100 - i * 20
-            if a > 0:
-                s = pygame.Surface((W, H), pygame.SRCALPHA)
-                pygame.draw.rect(s, (255, 255, 255, a), (i, i, W - 2 * i, H - 2 * i), 1)
-                screen.blit(s, (0, 0))
+        # Border glow (pre-cached)
+        for surf, pos in self._border_glow_surfaces:
+            screen.blit(surf, pos)
 
         if self.debug_mode:
             self._draw_debug_hitboxes(screen)
 
-    def _draw_goal_left(self, screen, W, H, goal_depth):
-        gh = int(self.goal_y2 - self.goal_y1)
-        if self.goal_left_sprite is not None:
-            ar = 520 / 949
-            tw = int(gh * ar)
-            sp = pygame.transform.smoothscale(self.goal_left_sprite, (tw, gh))
-            screen.blit(sp, (0, int(self.goal_y1)))
-            gd = int(tw * 0.3)
-            self.goal_left_hitbox = pygame.Rect(0, int(self.goal_y1), gd, gh)
-        else:
-            s = pygame.Surface((goal_depth, gh), pygame.SRCALPHA)
-            s.fill((255, 0, 0, 50))
-            screen.blit(s, (0, int(self.goal_y1)))
-            pygame.draw.line(screen, COLORS.NEON_RED, (0, int(self.goal_y1)), (goal_depth, int(self.goal_y1)), 3)
-            pygame.draw.line(screen, COLORS.NEON_RED, (0, int(self.goal_y2)), (goal_depth, int(self.goal_y2)), 3)
-            pygame.draw.line(screen, COLORS.NEON_RED, (goal_depth, int(self.goal_y1)), (goal_depth, int(self.goal_y2)), 3)
-            self.goal_left_hitbox = pygame.Rect(0, int(self.goal_y1), goal_depth, gh)
-
-    def _draw_goal_right(self, screen, W, H, goal_depth):
-        gh = int(self.goal_y2 - self.goal_y1)
-        if self.goal_right_sprite is not None:
-            ar = 520 / 949
-            tw = int(gh * ar)
-            sp = pygame.transform.smoothscale(self.goal_right_sprite, (tw, gh))
-            screen.blit(sp, (W - tw, int(self.goal_y1)))
-            gd = int(tw * 0.3)
-            self.goal_right_hitbox = pygame.Rect(W - gd, int(self.goal_y1), gd, gh)
-        else:
-            s = pygame.Surface((goal_depth, gh), pygame.SRCALPHA)
-            s.fill((0, 255, 0, 50))
-            screen.blit(s, (W - goal_depth, int(self.goal_y1)))
-            pygame.draw.line(screen, COLORS.NEON_GREEN, (W, int(self.goal_y1)), (W - goal_depth, int(self.goal_y1)), 3)
-            pygame.draw.line(screen, COLORS.NEON_GREEN, (W, int(self.goal_y2)), (W - goal_depth, int(self.goal_y2)), 3)
-            pygame.draw.line(screen, COLORS.NEON_GREEN, (W - goal_depth, int(self.goal_y1)), (W - goal_depth, int(self.goal_y2)), 3)
-            self.goal_right_hitbox = pygame.Rect(W - goal_depth, int(self.goal_y1), goal_depth, gh)
-
     def _draw_debug_hitboxes(self, screen):
-        if self.goal_left_hitbox:
-            ds = pygame.Surface((self.goal_left_hitbox.width, self.goal_left_hitbox.height), pygame.SRCALPHA)
-            ds.fill((255, 0, 0, 80))
-            screen.blit(ds, self.goal_left_hitbox.topleft)
-            pygame.draw.rect(screen, COLORS.RED, self.goal_left_hitbox, 2)
-        if self.goal_right_hitbox:
-            ds = pygame.Surface((self.goal_right_hitbox.width, self.goal_right_hitbox.height), pygame.SRCALPHA)
-            ds.fill((0, 255, 0, 80))
-            screen.blit(ds, self.goal_right_hitbox.topleft)
-            pygame.draw.rect(screen, COLORS.GREEN, self.goal_right_hitbox, 2)
+        if self._debug_left and self.goal_left_hitbox:
+            screen.blit(self._debug_left, self.goal_left_hitbox.topleft)
+        if self._debug_right and self.goal_right_hitbox:
+            screen.blit(self._debug_right, self.goal_right_hitbox.topleft)
 
     # ------------------------------------------------------------------
     # Goal detection
