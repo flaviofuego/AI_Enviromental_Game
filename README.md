@@ -25,7 +25,7 @@ Juego de Air Hockey con temática medioambiental y agente IA entrenado mediante 
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/yourusername/AI_Enviromental_Game.git
+git clone https://github.com/flaviofuego/AI_Enviromental_Game.git
 cd AI_Enviromental_Game
 
 # Instalar dependencias (requiere uv)
