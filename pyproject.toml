@@ -7,6 +7,10 @@ license = "MIT"
 requires-python = ">=3.12"
 authors = [
     { name = "Flavio Andres Arregoces Mercado" },
+    { name = "Cristian David Gonzalez Franco" },
+    { name = "Jorge Sanchez Barreneche" },
+    { name = "Bella Valentina Mejia Gonzalez" },
+
 ]
 keywords = [
     "air-hockey",
@@ -33,10 +37,12 @@ dependencies = [
     "numpy>=2.2.6",
     "pandas>=2.2.3",
     "pygame>=2.6.1",
+    "rich>=14.0.0",
     "seaborn>=0.13.2",
     "stable-baselines3[extra]>=2.6.0",
     "tensorboard>=2.19.0",
     "torch>=2.7.0",
+    "typer>=0.24.0",
 ]
 
 [project.urls]
@@ -45,6 +51,7 @@ Repository = "https://github.com/flaviofuego/AI_Enviromental_Game"
 [project.scripts]
 hockey-play = "game.main_hub:main"
 hockey-quick = "game.main:main"
+hockey-train = "training.train:app"
 
 [dependency-groups]
 dev = [
