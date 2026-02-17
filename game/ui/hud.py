@@ -9,6 +9,7 @@ from typing import Optional
 from shared.config import GameConfig, COLORS
 from game.core.game_state import GameState
 from game.core.match_manager import MatchConfig
+from game.components.TimerDisplay import TimerDisplay, TimerMode
 
 
 # Climate change facts shown between goals
@@ -40,6 +41,9 @@ class HUD:
         self._current_fact_idx = 0
         self._fact_display_time = 0.0
         self._show_fact = False
+        # Timer display component (created without mode — configured on first draw)
+        self._timer_display: Optional[TimerDisplay] = None
+        self._timer_configured = False
 
     def _get_font(self, size: int) -> pygame.font.Font:
         if size not in self._fonts:
@@ -67,12 +71,8 @@ class HUD:
             self._fact_display_time = now
             self._show_fact = True
 
-        # --- Score display ---
-        self._draw_score(screen, state, W, H, now)
-
-        # --- Timer ---
-        if match_config.time_limit_seconds and match_config.time_limit_seconds > 0:
-            self._draw_timer(screen, elapsed, match_config.time_limit_seconds, W)
+        # --- Score + Timer (single centred bar) ---
+        self._draw_score_and_timer(screen, state, match_config, elapsed, W, H, now)
 
         # --- Level name ---
         self._draw_level_name(screen, level_config, W)
@@ -87,56 +87,97 @@ class HUD:
         else:
             self._show_fact = False
 
-    def _draw_score(self, screen, state, W, H, now):
-        """Draw animated score display."""
+    def _draw_score_and_timer(self, screen, state, match_config, elapsed, W, H, now):
+        """Draw score and timer together in a single centred HUD bar."""
         flash_duration = 0.5
         flash_active = (now - self._score_flash_time) < flash_duration
 
-        # Player score (left)
+        # --- Build score surfaces ---
         p_size = 42 if flash_active and self._score_flash_side == "player" else 36
         p_color = (100, 255, 100) if flash_active and self._score_flash_side == "player" else COLORS.WHITE
-        p_font = self._get_font(p_size)
-        p_txt = p_font.render(str(state.player_score), True, p_color)
+        p_txt = self._get_font(p_size).render(str(state.player_score), True, p_color)
 
-        # Separator
-        sep_font = self._get_font(36)
-        sep_txt = sep_font.render(" - ", True, COLORS.WHITE)
+        sep_txt = self._get_font(36).render(" - ", True, COLORS.WHITE)
 
-        # AI score (right)
         a_size = 42 if flash_active and self._score_flash_side == "ai" else 36
         a_color = (255, 100, 100) if flash_active and self._score_flash_side == "ai" else COLORS.WHITE
-        a_font = self._get_font(a_size)
-        a_txt = a_font.render(str(state.ai_score), True, a_color)
+        a_txt = self._get_font(a_size).render(str(state.ai_score), True, a_color)
 
-        total_w = p_txt.get_width() + sep_txt.get_width() + a_txt.get_width()
+        score_w = p_txt.get_width() + sep_txt.get_width() + a_txt.get_width()
+
+        # --- Build timer text ---
+        self._ensure_timer_display(match_config)
+        timer_text, timer_color = self._timer_display._resolve_display(elapsed)
+        timer_str = self._timer_display._format_time(timer_text)
+        timer_font = self._get_font(24)
+        timer_txt = timer_font.render(timer_str, True, timer_color)
+
+        # --- Layout:  [ score  |  timer ] centred ---
+        divider_gap = 16   # space around the divider bar
+        divider_w = 1
+        total_w = score_w + divider_gap + divider_w + divider_gap + timer_txt.get_width()
+
+        row_h = max(p_txt.get_height(), a_txt.get_height(), timer_txt.get_height())
+        y = 10
         x_start = W // 2 - total_w // 2
-        y = 12
 
-        # Background bar
-        bar_rect = pygame.Rect(x_start - 15, y - 4, total_w + 30, max(p_txt.get_height(), a_txt.get_height()) + 8)
+        # Background pill
+        pad_x, pad_y = 14, 5
+        bar_rect = pygame.Rect(
+            x_start - pad_x, y - pad_y,
+            total_w + pad_x * 2, row_h + pad_y * 2,
+        )
         bar_surf = pygame.Surface((bar_rect.width, bar_rect.height), pygame.SRCALPHA)
-        bar_surf.fill((0, 0, 0, 100))
+        bar_surf.fill((0, 0, 0, 120))
         screen.blit(bar_surf, bar_rect.topleft)
-        pygame.draw.rect(screen, (255, 255, 255, 80), bar_rect, 1, border_radius=6)
+        pygame.draw.rect(screen, (255, 255, 255, 60), bar_rect, 1, border_radius=8)
 
-        screen.blit(p_txt, (x_start, y + (bar_rect.height - p_txt.get_height()) // 2 - 2))
-        screen.blit(sep_txt, (x_start + p_txt.get_width(), y + (bar_rect.height - sep_txt.get_height()) // 2 - 2))
-        screen.blit(a_txt, (x_start + p_txt.get_width() + sep_txt.get_width(), y + (bar_rect.height - a_txt.get_height()) // 2 - 2))
+        # Score glyphs
+        cx = x_start
+        screen.blit(p_txt, (cx, y + (row_h - p_txt.get_height()) // 2))
+        cx += p_txt.get_width()
+        screen.blit(sep_txt, (cx, y + (row_h - sep_txt.get_height()) // 2))
+        cx += sep_txt.get_width()
+        screen.blit(a_txt, (cx, y + (row_h - a_txt.get_height()) // 2))
+        cx += a_txt.get_width()
 
-    def _draw_timer(self, screen, elapsed, time_limit, W):
-        """Draw countdown timer."""
-        remaining = max(0, time_limit - elapsed)
-        mins = int(remaining) // 60
-        secs = int(remaining) % 60
+        # Vertical divider
+        cx += divider_gap
+        div_top = y + 3
+        div_bot = y + row_h - 3
+        pygame.draw.line(screen, (255, 255, 255, 90), (cx, div_top), (cx, div_bot), divider_w)
+        cx += divider_w + divider_gap
 
-        color = COLORS.WHITE
-        if remaining < 30:
-            color = (255, 100, 100) if int(remaining * 2) % 2 == 0 else (255, 200, 200)
+        # Timer text
+        screen.blit(timer_txt, (cx, y + (row_h - timer_txt.get_height()) // 2))
 
-        font = self._get_font(28)
-        txt = font.render(f"{mins:02d}:{secs:02d}", True, color)
-        x = W // 2 - txt.get_width() // 2
-        screen.blit(txt, (x, 50))
+    def _ensure_timer_display(self, match_config):
+        """Lazy-init / reconfigure the TimerDisplay component."""
+        if self._timer_display is None:
+            has_limit = (
+                match_config.time_limit_seconds is not None
+                and match_config.time_limit_seconds > 0
+            )
+            mode = TimerMode.COUNTDOWN if has_limit else TimerMode.COUNTUP
+            self._timer_display = TimerDisplay(
+                font_size=26,
+                mode=mode,
+                time_limit=match_config.time_limit_seconds if has_limit else None,
+                warning_threshold=30.0,
+                y_offset=50,
+            )
+            self._timer_configured = True
+        elif not self._timer_configured:
+            has_limit = (
+                match_config.time_limit_seconds is not None
+                and match_config.time_limit_seconds > 0
+            )
+            mode = TimerMode.COUNTDOWN if has_limit else TimerMode.COUNTUP
+            self._timer_display.configure(
+                mode=mode,
+                time_limit=match_config.time_limit_seconds if has_limit else None,
+            )
+            self._timer_configured = True
 
     def _draw_level_name(self, screen, level_config, W):
         """Draw level name in the top-left corner."""
