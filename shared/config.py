@@ -75,5 +75,4 @@ TRAINING_HEIGHT = 500
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(PROJECT_ROOT, "models")
-IMPROVED_MODELS_DIR = os.path.join(PROJECT_ROOT, "improved_models")
 LOGS_DIR = os.path.join(PROJECT_ROOT, "logs")
