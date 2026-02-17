@@ -1,5 +1,8 @@
 import pygame
 
+from .FontCache import font_cache
+
+
 class Card:
     def __init__(self, 
                  max_width=None,
@@ -77,7 +80,7 @@ class Card:
         """
         # Crear superficie para el texto con tamaño adaptativo
         font_size = 32 if text == "BLOQUEADO" else 24
-        font = pygame.font.Font(None, font_size)
+        font = font_cache.get(None, font_size)
         text_surface = font.render(text, True, text_color)
         
         # Calcular dimensiones

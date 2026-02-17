@@ -1,4 +1,22 @@
+"""
+Legacy circular image button — **DEPRECATED**.
+
+Use :class:`game.components.GameButton.GameButton` (or the convenience
+factories ``image_button`` / ``text_button``) for all new code.
+
+This module is kept only for backward-compatibility with any code that
+has not been migrated yet.  It will be removed in a future release.
+"""
+import warnings
 import pygame
+
+warnings.warn(
+    "game.components.Button is deprecated.  "
+    "Use game.components.GameButton instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 
 class Button(pygame.sprite.Sprite):
     def __init__(self, image: str, scale: tuple, position: tuple, tex_hover: str, help_callback=None):
