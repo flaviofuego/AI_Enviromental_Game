@@ -180,6 +180,8 @@ cython_debug/
 game/config/saves/
 logs/
 logs/*
+models/
+models/*
 
 # AI
 .agents/
