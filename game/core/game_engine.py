@@ -2,11 +2,14 @@
 Main game engine. Consolidates logic from main_improved.py and themed_game.py.
 Handles the core game loop, physics updates, and entity management.
 """
+import logging
 import time
 import numpy as np
 import pygame
 
 from shared.config import GameConfig, PhysicsConfig, COLORS
+
+logger = logging.getLogger(__name__)
 from shared.entities.puck import Puck
 from shared.entities.table import Table
 from shared.utils.drawing import draw_glow
@@ -21,8 +24,9 @@ from game.entities.ai_mallet import AIMallet
 from game.entities.keyboard_mallet import KeyboardMallet
 from game.ai.model_loader import find_best_model, load_optimized_model
 from game.ai.observation_builder import create_observation
-from game.config.level_config import get_level_config, get_asset_path
+from game.config.level_config import get_level_config
 from game.core.mechanics import create_mechanic
+from game.components.AudioManager import audio_manager as _audio_manager
 
 
 class GameEngine:
@@ -101,13 +105,13 @@ class GameEngine:
         self.renderer.pre_render_background(self.table, theme_bg)
 
         self.state.reset_match()
-        self.state.match_start_time = time.time()
         self.match_manager.start_match()
         self.steps_since_ai_hit = 0
 
     def _load_assets(self):
         """Load level-specific assets using SpriteLoader for consistency."""
         level_id = self.match_config.level_id
+        logger.info("Loading assets for level %d (mode=%s)", level_id, self.match_config.mode.name)
         self.assets = SpriteLoader.load_level_sprites(level_id, self.config)
 
     def _create_entities(self):
@@ -153,6 +157,17 @@ class GameEngine:
         gr = self.assets.get("goal_right")
         if gl and gr:
             self.table.set_goal_sprites(gl, gr)
+            logger.info(
+                "Table goals configured for level %d — left=%s right=%s",
+                self.match_config.level_id,
+                gl.get_size() if gl else None,
+                gr.get_size() if gr else None,
+            )
+        else:
+            logger.warning(
+                "No goal sprites found for level %d — using fallback rendering",
+                self.match_config.level_id,
+            )
 
     def _init_ai(self):
         """Load RL model for AI."""
@@ -191,14 +206,18 @@ class GameEngine:
 
             # --- Event handling ---
             for event in pygame.event.get():
+                _audio_manager.process_event(event)
+
                 if event.type == pygame.QUIT:
                     return "exit"
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         if self.state.phase == GamePhase.PLAYING:
                             self.state.phase = GamePhase.PAUSED
+                            self.state.timer.pause()
                         elif self.state.phase == GamePhase.PAUSED:
                             self.state.phase = GamePhase.PLAYING
+                            self.state.timer.resume()
                         elif self.state.phase == GamePhase.GAME_OVER:
                             return "back_to_menu"
                     elif event.key == pygame.K_F1:
@@ -277,7 +296,7 @@ class GameEngine:
 
         # Time limit check
         if self.match_config.time_limit_seconds:
-            elapsed = time.time() - self.state.match_start_time
+            elapsed = self.state.timer.elapsed
             self.state.check_time_limit(elapsed, self.match_config.time_limit_seconds,
                                         self.match_config.overtime_on_tie)
 
@@ -390,10 +409,9 @@ class GameEngine:
 
         # HUD (animated score, timer, power-up bars, climate facts)
         if self.hud:
-            elapsed = time.time() - self.state.match_start_time if self.state.phase == GamePhase.PLAYING else self.state.match_elapsed
             self.hud.draw(
                 self.screen, self.state, self.match_config,
-                elapsed, self.level_config,
+                self.state.timer.elapsed, self.level_config,
                 self.powerup_manager,
             )
         else:
@@ -427,16 +445,29 @@ class GameEngine:
         font_med = self.renderer.get_font(32)
         font_small = self.renderer.get_font(24)
 
+        is_pvp = self.match_config.mode == GameMode.PLAYER_VS_PLAYER
+
         # Winner text
-        if self.state.winner == "player":
-            title = "Has Ganado!"
-            color = (100, 255, 100)
-        elif self.state.winner == "ai":
-            title = "Has Perdido!"
-            color = (255, 100, 100)
+        if is_pvp:
+            if self.state.winner == "player":
+                title = "Jugador 1 Gana!"
+                color = (100, 255, 100)
+            elif self.state.winner == "ai":
+                title = "Jugador 2 Gana!"
+                color = (100, 180, 255)
+            else:
+                title = "Empate!"
+                color = COLORS.WHITE
         else:
-            title = "Empate!"
-            color = COLORS.WHITE
+            if self.state.winner == "player":
+                title = "Has Ganado!"
+                color = (100, 255, 100)
+            elif self.state.winner == "ai":
+                title = "Has Perdido!"
+                color = (255, 100, 100)
+            else:
+                title = "Empate!"
+                color = COLORS.WHITE
 
         title_surf = font_big.render(title, True, color)
         self.screen.blit(title_surf, (W // 2 - title_surf.get_width() // 2, H // 4))
@@ -447,14 +478,15 @@ class GameEngine:
         )
         self.screen.blit(score_txt, (W // 2 - score_txt.get_width() // 2, H // 4 + 60))
 
-        # Stats
-        elapsed = self.state.match_elapsed or (time.time() - self.state.match_start_time)
+        # Stats — mode-aware labels
+        elapsed = self.state.timer.elapsed
         mins = int(elapsed) // 60
         secs = int(elapsed) % 60
+        p2_label = "Golpes J2" if is_pvp else "Golpes IA"
         stats = [
             f"Tiempo: {mins:02d}:{secs:02d}",
-            f"Golpes jugador: {self.state.total_hits_player}",
-            f"Golpes IA: {self.state.total_hits_ai}",
+            f"Golpes J1: {self.state.total_hits_player}",
+            f"{p2_label}: {self.state.total_hits_ai}",
         ]
         for i, s in enumerate(stats):
             st = font_small.render(s, True, (200, 200, 200))
@@ -487,7 +519,7 @@ class GameEngine:
         self.player2.rect.center = (int(self.player2.position[0]), int(self.player2.position[1]))
         self.player2.velocity = [0.0, 0.0]
         self.last_action = 4
-        self.state.match_start_time = time.time()
+        self.state.timer.start()
         self.steps_since_ai_hit = 0
         if self.powerup_manager:
             self.powerup_manager.reset()
@@ -513,6 +545,7 @@ class GameEngine:
 
             if resume_rect.collidepoint(mouse_pos):
                 self.state.phase = GamePhase.PLAYING
+                self.state.timer.resume()
             elif restart_rect.collidepoint(mouse_pos):
                 self._restart_match()
             elif menu_rect.collidepoint(mouse_pos):

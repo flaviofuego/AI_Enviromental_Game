@@ -3,6 +3,8 @@ Game state machine: manages transitions between menu, playing, paused, and game_
 """
 from enum import Enum, auto
 
+from game.core.match_timer import MatchTimer
+
 
 class GamePhase(Enum):
     """Top-level game phases."""
@@ -26,8 +28,31 @@ class GameState:
         # Match stats
         self.total_hits_player = 0
         self.total_hits_ai = 0
-        self.match_start_time = 0.0
-        self.match_elapsed = 0.0
+        # Centralised timer — replaces raw match_start_time / match_elapsed
+        self.timer = MatchTimer()
+
+    # ------------------------------------------------------------------
+    # Backward-compatible properties so existing code keeps working
+    # ------------------------------------------------------------------
+
+    @property
+    def match_start_time(self) -> float:
+        """Deprecated — use ``self.timer.elapsed`` instead."""
+        return self.timer._start_time
+
+    @match_start_time.setter
+    def match_start_time(self, value: float) -> None:
+        # Kept for legacy callers; prefer timer.start()
+        self.timer._start_time = value
+
+    @property
+    def match_elapsed(self) -> float:
+        return self.timer.elapsed
+
+    @match_elapsed.setter
+    def match_elapsed(self, value: float) -> None:
+        # Legacy setter — freeze the timer at this value
+        self.timer._frozen_elapsed = value
 
     def reset_match(self):
         """Reset scores and stats for a new match."""
@@ -36,8 +61,7 @@ class GameState:
         self.winner = None
         self.total_hits_player = 0
         self.total_hits_ai = 0
-        self.match_start_time = 0.0
-        self.match_elapsed = 0.0
+        self.timer.start()
         self.phase = GamePhase.PLAYING
 
     def record_goal(self, scorer: str, score_limit: int):
@@ -53,10 +77,12 @@ class GameState:
         if self.player_score >= score_limit:
             self.winner = "player"
             self.phase = GamePhase.GAME_OVER
+            self.timer.freeze()
             return True
         if self.ai_score >= score_limit:
             self.winner = "ai"
             self.phase = GamePhase.GAME_OVER
+            self.timer.freeze()
             return True
         return False
 
@@ -66,12 +92,12 @@ class GameState:
         """
         if time_limit is None or time_limit <= 0:
             return False
-        self.match_elapsed = elapsed
         if elapsed >= time_limit:
             if self.player_score != self.ai_score or not overtime_on_tie:
                 self.winner = "player" if self.player_score > self.ai_score else "ai"
                 if self.player_score == self.ai_score:
                     self.winner = "tie"
                 self.phase = GamePhase.GAME_OVER
+                self.timer.freeze()
                 return True
         return False
