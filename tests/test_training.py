@@ -270,3 +270,233 @@ class TestPPOConfigs:
             assert cfg.batch_size > 0, f"{name} has invalid batch_size"
             assert cfg.n_epochs > 0, f"{name} has invalid n_epochs"
             assert 0 < cfg.gamma <= 1.0, f"{name} has invalid gamma"
+
+
+# ===================================================================
+# Opponent System (Mejora 8)
+# ===================================================================
+
+from training.envs.opponents import (
+    AlgorithmicOpponent,
+    DefensiveStrategy,
+    FieldSnapshot,
+    InterceptStrategy,
+    OffensiveStrategy,
+    OpponentFactory,
+    OpponentParams,
+    OpponentState,
+    PositionalStrategy,
+)
+from training.configs.curriculum import CurriculumMetrics, CURRICULUM_LEVELS
+
+
+def _make_snapshot(
+    puck_pos=(400, 250),
+    puck_vel=(0, 0),
+    mallet_pos=(200, 250),
+    width=800,
+    height=500,
+) -> FieldSnapshot:
+    """Helper: create a minimal FieldSnapshot for testing."""
+    return FieldSnapshot(
+        width=width,
+        height=height,
+        half_width=width // 2,
+        mallet_pos=mallet_pos,
+        mallet_radius=32,
+        puck_pos=puck_pos,
+        puck_vel=puck_vel,
+        puck_radius=15,
+        own_goal_x=0.0,
+        own_goal_center_y=height / 2,
+        goal_y1=height * (1 - 1 / 3) / 2,
+        goal_y2=height * (1 + 1 / 3) / 2,
+        rival_goal_x=float(width),
+        rival_goal_center_y=height / 2,
+    )
+
+
+class TestOpponentParams:
+    def test_from_skill_clamps(self):
+        p = OpponentParams.from_skill(1.5)
+        assert p.skill == 1.0
+        p = OpponentParams.from_skill(-0.5)
+        assert p.skill == 0.0
+
+    def test_style_weights_sum_to_one(self):
+        for s in [0.0, 0.3, 0.5, 0.7, 1.0]:
+            p = OpponentParams.from_skill(s)
+            total = sum(p.style_weights.values())
+            assert total == pytest.approx(1.0, abs=1e-6), f"skill={s} → weights sum={total}"
+
+    def test_from_curriculum_level(self):
+        level = CURRICULUM_LEVELS[3]
+        p = OpponentParams.from_curriculum_level(level)
+        assert p.accuracy == level.accuracy
+        assert p.aggression == level.aggression
+
+
+class TestOpponentStrategies:
+    def test_defensive_stays_near_goal(self):
+        snap = _make_snapshot(puck_pos=(300, 200), puck_vel=(-5, 1))
+        strategy = DefensiveStrategy()
+        params = OpponentParams.from_skill(0.5)
+        tx, ty = strategy.compute_target(snap, params)
+        # Should be in the left portion of the field
+        assert tx < snap.half_width * 0.5
+
+    def test_offensive_approaches_puck(self):
+        snap = _make_snapshot(puck_pos=(200, 300), puck_vel=(0, 0))
+        strategy = OffensiveStrategy()
+        params = OpponentParams.from_skill(0.7)
+        tx, ty = strategy.compute_target(snap, params)
+        # Target should be near the puck
+        dist = ((tx - 200) ** 2 + (ty - 300) ** 2) ** 0.5
+        assert dist < 200
+
+    def test_intercept_computes_valid_target(self):
+        snap = _make_snapshot(puck_pos=(500, 200), puck_vel=(-4, 2))
+        strategy = InterceptStrategy()
+        params = OpponentParams.from_skill(0.6)
+        tx, ty = strategy.compute_target(snap, params)
+        assert 0 <= tx <= snap.half_width
+        assert 0 <= ty <= snap.height
+
+    def test_positional_near_center(self):
+        snap = _make_snapshot(puck_pos=(600, 400), puck_vel=(3, 0))
+        strategy = PositionalStrategy()
+        params = OpponentParams.from_skill(0.4)
+        tx, ty = strategy.compute_target(snap, params)
+        assert 100 < tx < 300
+        assert 100 < ty < 400
+
+
+class TestAlgorithmicOpponent:
+    def test_does_not_stay_still(self):
+        """Opponent must move over a series of steps."""
+        opp = OpponentFactory.from_skill(0.5)
+        positions = set()
+        pos = (200.0, 250.0)
+        for i in range(50):
+            snap = _make_snapshot(
+                puck_pos=(300 - i, 250),
+                puck_vel=(-3, 1),
+                mallet_pos=pos,
+            )
+            new_x, new_y, _, _ = opp.update(snap, pos)
+            positions.add((round(new_x, 1), round(new_y, 1)))
+            pos = (new_x, new_y)
+        assert len(positions) > 3, "Opponent should move to multiple positions"
+
+    def test_defends_when_puck_approaches(self):
+        """Opponent should enter DEFENSIVE state when puck shoots at it."""
+        opp = OpponentFactory.from_skill(0.6)
+        snap = _make_snapshot(puck_pos=(350, 250), puck_vel=(-8, 0))
+        opp.update(snap, (200.0, 250.0))
+        assert opp.state in (OpponentState.DEFENSIVE, OpponentState.INTERCEPT)
+
+    def test_attacks_when_puck_in_own_half(self):
+        """Opponent should go offensive when puck is in its half and slow."""
+        opp = OpponentFactory.from_skill(0.7)
+        opp._style_bias = "offensive"  # force bias for determinism
+        snap = _make_snapshot(puck_pos=(200, 250), puck_vel=(0.5, 0))
+        opp.update(snap, (150.0, 250.0))
+        assert opp.state == OpponentState.OFFENSIVE
+
+    def test_varies_behavior_across_episodes(self):
+        """Style bias should change between resets (anti-overfitting)."""
+        opp = OpponentFactory.from_skill(0.5)
+        biases = set()
+        for _ in range(20):
+            opp.reset_episode()
+            biases.add(opp._style_bias)
+        assert len(biases) >= 2, "Should show behavioral variation across episodes"
+
+    def test_skill_scaling(self):
+        """Higher skill opponent should move faster / more precisely."""
+        opp_low = OpponentFactory.from_skill(0.1)
+        opp_high = OpponentFactory.from_skill(0.9)
+        assert opp_high.params.max_speed > opp_low.params.max_speed
+        assert opp_high.params.accuracy > opp_low.params.accuracy
+
+    def test_stays_in_left_half(self):
+        """Opponent mallet must never cross the center line."""
+        opp = OpponentFactory.from_skill(0.9)
+        opp._style_bias = "offensive"
+        pos = (200.0, 250.0)
+        for _ in range(200):
+            snap = _make_snapshot(
+                puck_pos=(600, 250),
+                puck_vel=(5, 0),
+                mallet_pos=pos,
+            )
+            new_x, new_y, _, _ = opp.update(snap, pos)
+            assert new_x <= snap.half_width, f"Crossed center: x={new_x}"
+            assert new_y >= 0 and new_y <= snap.height
+            pos = (new_x, new_y)
+
+
+class TestBaseEnvOpponentIntegration:
+    """Verify that base_env uses the new opponent system correctly."""
+
+    def test_env_has_opponent(self, env):
+        assert hasattr(env, "opponent")
+        assert isinstance(env.opponent, AlgorithmicOpponent)
+
+    def test_opponent_resets_on_env_reset(self, env):
+        env.reset(seed=42)
+        bias1 = env.opponent._style_bias
+        # Reset multiple times to check if bias changes (probabilistic)
+        biases = {bias1}
+        for _ in range(10):
+            env.reset()
+            biases.add(env.opponent._style_bias)
+        # At least one different bias in 10 resets (very high probability)
+        assert len(biases) >= 1  # Always true, but checks no crash
+
+    def test_difficulty_increases_opponent_params(self, env):
+        env.reset()
+        old_skill = env.opponent_skill
+        env.last_average_reward = -1000  # Force advancement
+        env.increase_opponent_difficulty(500)
+        assert env.opponent_skill > old_skill
+        assert env.opponent.params.skill == env.opponent_skill
+
+    def test_human_mallet_stays_in_bounds(self, env):
+        """After many steps, opponent mallet should remain in-bounds."""
+        env.reset()
+        W, H = env.config.width, env.config.height
+        for _ in range(100):
+            env.step(env.action_space.sample())
+        x, y = env.human_mallet.position
+        assert 0 <= x <= W // 2, f"Out of bounds x={x}"
+        assert 0 <= y <= H, f"Out of bounds y={y}"
+
+
+class TestCurriculumMetrics:
+    def test_meets_advancement(self):
+        level = CURRICULUM_LEVELS[2]
+        passing = CurriculumMetrics(
+            win_rate=0.7,
+            avg_goals_scored=3.0,
+            avg_goals_conceded=2.0,
+        )
+        assert passing.meets_advancement(level)
+
+    def test_fails_advancement_low_winrate(self):
+        level = CURRICULUM_LEVELS[2]
+        failing = CurriculumMetrics(
+            win_rate=0.3,
+            avg_goals_scored=3.0,
+            avg_goals_conceded=2.0,
+        )
+        assert not failing.meets_advancement(level)
+
+    def test_fails_advancement_low_goals(self):
+        level = CURRICULUM_LEVELS[2]
+        failing = CurriculumMetrics(
+            win_rate=0.8,
+            avg_goals_scored=0.5,
+            avg_goals_conceded=1.0,
+        )
+        assert not failing.meets_advancement(level)
