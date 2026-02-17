@@ -39,51 +39,93 @@ play-level: ## Jugar un nivel específico: make play-level LEVEL=3
 		pygame.quit()"
 
 # ---------------------------------------------------------------------------
-# Entrenamiento IA  (v2: 9 acciones con diagonales)
+# Entrenamiento IA  (Typer CLI con Rich)
 # ---------------------------------------------------------------------------
-# Presets disponibles:
-#   v2_quick     — ~100k steps, pruebas rápidas
-#   v2_standard  — ~500k steps, entrenamiento balanceado (default)
-#   v2_deep      — ~2M  steps, entrenamiento exhaustivo
-#   quick / standard / deep / exploration — presets legacy (4 acciones)
+# Uso principal:
+#   make train           — Wizard interactivo (selección visual de todo)
+#   make train-start     — Entrenar con preset por defecto (v3_optimized)
+#   make train-presets   — Ver todos los presets disponibles
+#
+# Atajos de presets:
+#   make train-quick     — ~800K steps, pruebas rápidas
+#   make train-deep      — ~5M steps, exhaustivo
+#   make train-dqn       — DQN 2M steps
+#
+# Entrenamiento directo con parámetros:
+#   make train-custom PRESET=v3_optimized ENVS=4 TIMESTEPS=1000000
 #
 # Entornos:  base | powerups
 #
-# Overrides opcionales (se aplican sobre cualquier preset):
-#   --timesteps N    --epochs N       --lr F
-#   --batch-size N   --gamma F        --ent-coef F
-#   --clip-range F   --n-steps N      --n-envs N
-#   --checkpoint-freq N  --eval-freq N
+# Variables disponibles para train-custom:
+#   PRESET     (default: v3_optimized)
+#   ENV        (default: base)
+#   ENVS       (default: 4)
+#   TIMESTEPS  (opcional, override)
+#   LR         (opcional, override)
+#   BATCH      (opcional, override)
 # ---------------------------------------------------------------------------
 
+# Variables con defaults
+PRESET  ?= v3_optimized
+ENV     ?= base
+ENVS    ?= 4
+
+# Construir overrides dinámicamente
+_OVERRIDES :=
+ifdef TIMESTEPS
+_OVERRIDES += --timesteps $(TIMESTEPS)
+endif
+ifdef LR
+_OVERRIDES += --lr $(LR)
+endif
+ifdef BATCH
+_OVERRIDES += --batch-size $(BATCH)
+endif
+ifdef EPOCHS
+_OVERRIDES += --epochs $(EPOCHS)
+endif
+ifdef GAMMA
+_OVERRIDES += --gamma $(GAMMA)
+endif
+ifdef ENT_COEF
+_OVERRIDES += --ent-coef $(ENT_COEF)
+endif
+
 .PHONY: train
-train: ## Entrenar modelo IA (v2_standard, ~500k steps)
-	uv run python -m training.train --preset v2_standard --env base
+train: ## 🧙 Wizard interactivo — selección visual de todos los parámetros
+	uv run python -m training.train wizard
+
+.PHONY: train-start
+train-start: ## Entrenar con preset (v3_optimized por defecto)
+	uv run python -m training.train start --preset $(PRESET) --env $(ENV) --n-envs $(ENVS) $(_OVERRIDES)
 
 .PHONY: train-quick
-train-quick: ## Entrenamiento rápido para pruebas (~100k steps)
-	uv run python -m training.train --preset v2_quick --env base
+train-quick: ## Entrenamiento rápido (~800K steps, ~5 min)
+	uv run python -m training.train start --preset v3_quick --env base --n-envs $(ENVS)
 
 .PHONY: train-deep
-train-deep: ## Entrenamiento profundo (~2M steps)
-	uv run python -m training.train --preset v2_deep --env base
+train-deep: ## Entrenamiento profundo (~5M steps, ~1h)
+	uv run python -m training.train start --preset v3_deep --env base --n-envs $(ENVS)
+
+.PHONY: train-dqn
+train-dqn: ## Entrenar con DQN (~2M steps)
+	uv run python -m training.train start --preset v3_dqn --env base --n-envs $(ENVS)
 
 .PHONY: train-powerups
-train-powerups: ## Entrenar con power-ups (obs 26-dim)
-	uv run python -m training.train --preset v2_standard --env powerups
-
-.PHONY: train-parallel
-train-parallel: ## Entrenar con 4 entornos paralelos
-	uv run python -m training.train --preset v2_standard --env base --n-envs 4
+train-powerups: ## Entrenar con power-ups
+	uv run python -m training.train start --preset $(PRESET) --env powerups --n-envs $(ENVS)
 
 .PHONY: train-custom
-train-custom: ## Entrenar con parámetros personalizados (ejemplo)
-	uv run python -m training.train --preset v2_standard --env base \
-		--timesteps 300000 --lr 3e-4 --ent-coef 0.02
+train-custom: ## Entrenar con parámetros personalizados (ver variables arriba)
+	uv run python -m training.train start --preset $(PRESET) --env $(ENV) --n-envs $(ENVS) $(_OVERRIDES)
 
 .PHONY: train-resume
 train-resume: ## Reanudar entrenamiento desde último checkpoint
-	uv run python -m training.train --preset v2_standard --env base --resume auto
+	uv run python -m training.train start --preset $(PRESET) --env $(ENV) --resume auto
+
+.PHONY: train-presets
+train-presets: ## Mostrar tabla de presets disponibles
+	uv run python -m training.train presets
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -119,6 +161,7 @@ lint: ## Verificar estilo de código
 	@uv run python -m py_compile game/core/game_engine.py
 	@uv run python -m py_compile training/envs/base_env.py
 	@uv run python -m py_compile training/train.py
+	@uv run python -m py_compile training/__main__.py
 	@uv run python -m py_compile game/ai/model_loader.py
 	@echo "✓ Archivos principales compilan correctamente"
 
