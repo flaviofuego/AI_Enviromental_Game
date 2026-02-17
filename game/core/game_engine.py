@@ -27,6 +27,7 @@ from game.ai.observation_builder import create_observation
 from game.config.level_config import get_level_config
 from game.core.mechanics import create_mechanic
 from game.components.AudioManager import audio_manager as _audio_manager
+from game.components.SkinSelector import DEFAULT_SKINS
 
 
 class GameEngine:
@@ -114,6 +115,16 @@ class GameEngine:
         logger.info("Loading assets for level %d (mode=%s)", level_id, self.match_config.mode.name)
         self.assets = SpriteLoader.load_level_sprites(level_id, self.config)
 
+    def _get_player_skin_color(self):
+        """Get the player's chosen skin color from their profile."""
+        skin_id = "default"
+        if self.save_system and self.save_system.current_profile:
+            skin_id = self.save_system.current_profile.get("skin", "default")
+        for skin in DEFAULT_SKINS:
+            if skin["id"] == skin_id:
+                return skin["color"]
+        return DEFAULT_SKINS[0]["color"]
+
     def _create_entities(self):
         """Create game entities based on mode."""
         puck_img = self.assets.get("puck")
@@ -122,11 +133,16 @@ class GameEngine:
             puck_img = pygame.transform.smoothscale(puck_img, (ps, ps))
         self.puck = Puck(self.config, self.physics, puck_img)
 
+        # Player mallet: use skin color from profile
+        player_color = self._get_player_skin_color()
         p1_img = self.assets.get("mallet_player")
         if p1_img:
             ms = self.config.mallet_radius * 2
             p1_img = pygame.transform.smoothscale(p1_img, (ms, ms))
-        self.player1 = HumanMallet(self.config, custom_image=p1_img)
+            self.player1 = HumanMallet(self.config, color=player_color, custom_image=p1_img)
+        else:
+            # No player-specific sprite: create colored mallet from skin
+            self.player1 = HumanMallet(self.config, color=player_color)
 
         if self.match_config.mode == GameMode.PLAYER_VS_PLAYER:
             p2_img = self.assets.get("mallet_ai")

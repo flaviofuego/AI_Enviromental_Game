@@ -74,7 +74,14 @@ class SpriteLoader:
             s = SpriteLoader.load_sprite(mallet_path, (ms, ms))
             if s:
                 sprites["mallet_ai"] = s
-                sprites["mallet_player"] = s.copy()
+
+        # Load player-specific mallet sprite if available
+        player_mallet_path = get_asset_path(level_id, "mallet_player.png")
+        if os.path.exists(player_mallet_path):
+            ms = int(64 * sf)
+            s = SpriteLoader.load_sprite(player_mallet_path, (ms, ms))
+            if s:
+                sprites["mallet_player"] = s
 
         for key, fname in [("goal_left", "porteria_izq.png"), ("goal_right", "porteria_der.png")]:
             p = get_asset_path(level_id, fname)

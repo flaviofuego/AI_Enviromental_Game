@@ -14,6 +14,7 @@ class Mallet(pygame.sprite.Sprite):
         super().__init__()
         self.config = config or GameConfig()
         self.radius = self.config.mallet_radius
+        self.color = color  # Store color for apply_size_modifier
 
         # Visual
         if custom_image is not None:
@@ -72,7 +73,7 @@ class Mallet(pygame.sprite.Sprite):
         self._size_modifier = multiplier
         self.radius = max(8, int(self._base_radius * multiplier))
         # Regenerate image and mask at new size
-        color = COLORS.NEON_RED  # fallback
+        color = self.color
         self.image = pygame.Surface(
             (self.radius * 2, self.radius * 2), pygame.SRCALPHA
         )
