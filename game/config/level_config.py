@@ -58,7 +58,7 @@ LEVELS = {
         "difficulty": 1,
         "ai_reaction_speed": 0.10,
         "ai_prediction_factor": 0.50,
-        "ai_move_speed": 10
+        "ai_move_speed": 1
     },
     2: {
         "name": "Ozone Shield",
@@ -90,7 +90,7 @@ LEVELS = {
         "difficulty": 2,
         "ai_reaction_speed": 0.18,
         "ai_prediction_factor": 0.58,
-        "ai_move_speed": 15
+        "ai_move_speed": 3
     },
     3: {
         "name": "Smog Storm",
@@ -120,7 +120,7 @@ LEVELS = {
         "difficulty": 3,
         "ai_reaction_speed": 0.25,
         "ai_prediction_factor": 0.65,
-        "ai_move_speed": 20
+        "ai_move_speed": 5
     },
     4: {
         "name": "Vanishing Forest",
@@ -151,7 +151,7 @@ LEVELS = {
         "difficulty": 4,
         "ai_reaction_speed": 0.40,
         "ai_prediction_factor": 0.80,
-        "ai_move_speed": 25
+        "ai_move_speed": 7
     },
     5: {
         "name": "Final Stand",
@@ -183,7 +183,7 @@ LEVELS = {
         "difficulty": 5,
         "ai_reaction_speed": 0.55,
         "ai_prediction_factor": 0.95,
-        "ai_move_speed": 30
+        "ai_move_speed": 8
     }
 }
 
