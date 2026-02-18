@@ -49,8 +49,10 @@ from training.callbacks import (
     DifficultyProgressionCallback,
     BehaviorAnalysisCallback,
     MovementBalanceCallback,
+    RewardBreakdownCallback,
 )
 from training.env_pipeline import build_training_envs, save_vec_normalize
+from training.logger_format import build_rich_logger
 
 # ─── Globals ────────────────────────────────────────────────────────
 console = Console()
@@ -293,10 +295,16 @@ def _create_model(config: PPOConfig, env, logs_dir: str, resume_path: str | None
 
     if resume_path and os.path.exists(resume_path):
         console.print(f"[yellow]Reanudando desde:[/yellow] {resume_path}")
-        return algo_cls.load(resume_path, env=env)
+        model = algo_cls.load(resume_path, env=env)
+    else:
+        sb3_kwargs = config.to_sb3_kwargs()
+        # Suprimir verbose del config — usamos nuestro propio logger Rich
+        sb3_kwargs.pop("verbose", None)
+        model = algo_cls("MlpPolicy", env, verbose=0, **sb3_kwargs)
 
-    sb3_kwargs = config.to_sb3_kwargs()
-    return algo_cls("MlpPolicy", env, tensorboard_log=logs_dir, **sb3_kwargs)
+    # Aplicar logger Rich: panel compacto + TensorBoard + CSV
+    model.set_logger(build_rich_logger(logs_dir))
+    return model
 
 
 def _build_callbacks(config, eval_env, models_dir, logs_dir, model_name):
@@ -321,6 +329,10 @@ def _build_callbacks(config, eval_env, models_dir, logs_dir, model_name):
         cbs.append(DifficultyProgressionCallback(eval_env, eval_freq=config.eval_freq))
         cbs.append(BehaviorAnalysisCallback())
         cbs.append(MovementBalanceCallback())
+
+    # Reward breakdown → TensorBoard (todos los algoritmos)
+    log_freq = max(config.n_steps if hasattr(config, "n_steps") else 2048, 2048)
+    cbs.append(RewardBreakdownCallback(log_freq=log_freq, verbose=0))
 
     return CallbackList(cbs), eval_cb
 
