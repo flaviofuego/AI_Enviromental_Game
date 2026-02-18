@@ -576,6 +576,105 @@ class PBRSComponent:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# COMPONENT: Powerup reward (event-driven, extensible)
+# ─────────────────────────────────────────────────────────────────────
+
+@dataclass
+class PowerUpEvent:
+    """
+    Lightweight event descriptor passed from AirHockeyWithPowerUpsEnv
+    to PowerUpRewardComponent each step.
+
+    The env collects these from TrainingPowerUpAdapter.step() events and
+    packages them as a list in FieldState.powerup_events (injected externally
+    via RewardCalculator.calculate_with_powerups).
+    """
+    event_type: str   # "collected" | "expired"
+    powerup_id: str
+    player_idx: int   # collector player index
+    target_idx: int   # affected player index
+    ai_player_idx: int = 1
+
+
+class PowerUpRewardComponent:
+    """
+    Translates powerup events into reward signals for the RL agent.
+
+    Design:
+        - Stateless between events (episode bonus is tracked externally
+          by PowerUpRewardSignal in the adapter to keep concerns separated).
+        - Positive rewards only for AI-beneficial events.
+        - Small expiry penalty to incentivise using timely powerups.
+        - A special bonus for scoring goals while opponent is paralyzed.
+
+    Reward constants (docs §7.3):
+        COLLECT_POSITIVE          = +0.15  AI collects self-buff
+        COLLECT_NEGATIVE_OPPONENT = +0.10  AI debuffs opponent
+        EXPIRE_PENALTY            = -0.02  AI loses a buff
+        PARALYZED_GOAL_BONUS      = +0.25  goal scored vs paralyzed opp
+    """
+
+    name = "powerup"
+
+    # Reward magnitudes (design-tunable here without touching logic)
+    COLLECT_POSITIVE: float          = +0.15
+    COLLECT_NEGATIVE_OPPONENT: float = +0.10
+    EXPIRE_PENALTY: float            = -0.02
+    PARALYZED_GOAL_BONUS: float      = +0.25
+
+    def calculate(self, state: FieldState, breakdown: RewardBreakdown) -> None:
+        """
+        Process powerup events stored in state.powerup_events (if present).
+
+        FieldState is frozen so events are injected as an attribute from
+        the env subclass before calling calculate(). If the attribute is
+        absent, this component is a no-op (backward compatible with base env).
+        """
+        events = getattr(state, "powerup_events", None)
+        if not events:
+            return
+
+        ai_idx = getattr(state, "ai_player_idx", 1)
+
+        for ev in events:
+            ev_type    = ev.get("type", "")
+            player_idx = ev.get("player_idx", -1)
+            target_idx = ev.get("target_idx", -1)
+
+            if ev_type == "collected" and player_idx == ai_idx:
+                if target_idx == ai_idx:
+                    breakdown.add(
+                        "pu_collect_positive",
+                        self.COLLECT_POSITIVE,
+                        RewardCategory.GOAL,  # reuse existing category
+                    )
+                else:
+                    breakdown.add(
+                        "pu_collect_debuff",
+                        self.COLLECT_NEGATIVE_OPPONENT,
+                        RewardCategory.GOAL,
+                    )
+
+            elif ev_type == "expired" and target_idx == ai_idx:
+                breakdown.add(
+                    "pu_expire_penalty",
+                    self.EXPIRE_PENALTY,
+                    RewardCategory.DISCIPLINE,
+                )
+
+        # Bonus for goal scored while opponent is paralyzed
+        if getattr(state, "opponent_paralyzed_goal", False):
+            breakdown.add(
+                "pu_paralyzed_goal",
+                self.PARALYZED_GOAL_BONUS,
+                RewardCategory.GOAL,
+            )
+
+    def reset(self) -> None:
+        pass  # stateless
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Orchestrator — assembles all components
 # ─────────────────────────────────────────────────────────────────────
 
