@@ -100,33 +100,32 @@ def create_observation(ai_mallet, puck, human_mallet,
 
         pu_obs = np.zeros(13, dtype=np.float32)
         if powerup_manager is not None:
-            # Field power-ups (up to 2)
-            from game.entities.powerups import PowerUpType as GPT
-            type_map = {GPT.SPEED_BOOST: 0, GPT.SIZE_INCREASE: 1, GPT.SLOW_OPPONENT: 2,
-                        GPT.PUCK_MAGNET: 3, GPT.SHIELD: 4, GPT.SHRINK_OPPONENT: 5}
-            for i, pu in enumerate(powerup_manager.field_powerups[:2]):
+            # Field spheres (up to 2) — new API: get_field_spheres()
+            id_to_idx = {
+                "speed_boost": 0, "magnet": 1, "slow_opponent": 2,
+                "shield": 3, "obstacle": 4, "paralyze": 5,
+            }
+            field_spheres = powerup_manager.get_field_spheres()
+            for i, sphere in enumerate(field_spheres[:2]):
                 offset = i * 4
-                pu_obs[offset] = 1.0
-                pu_obs[offset + 1] = pu.position[0] / W
-                pu_obs[offset + 2] = pu.position[1] / H
-                pu_obs[offset + 3] = type_map.get(pu.type, 0) / 5.0
-            # Active effects on AI (player index 1)
-            for effect in powerup_manager.active_effects:
-                if effect.target_index == 1:  # AI is player index 1
-                    if effect.type == GPT.SPEED_BOOST:
-                        pu_obs[8] = 1.0
-                    elif effect.type == GPT.SIZE_INCREASE:
-                        pu_obs[9] = 1.0
-                    elif effect.type == GPT.PUCK_MAGNET:
-                        pu_obs[10] = 1.0
-                    elif effect.type == GPT.SHIELD:
-                        pu_obs[11] = 1.0
-            # Distance to nearest power-up
-            if powerup_manager.field_powerups:
+                pu_obs[offset]     = 1.0
+                pu_obs[offset + 1] = sphere.position[0] / W
+                pu_obs[offset + 2] = sphere.position[1] / H
+                pu_obs[offset + 3] = id_to_idx.get(sphere.definition.id, 0) / 5.0
+            # Active effects on AI (player index 1) — new API: get_active_effects(1)
+            for effect in powerup_manager.get_active_effects(1):
+                if effect.id == "speed_boost":
+                    pu_obs[8] = 1.0
+                elif effect.id == "magnet":
+                    pu_obs[10] = 1.0
+                elif effect.id == "shield":
+                    pu_obs[11] = 1.0
+            # Distance to nearest field sphere
+            if field_spheres:
                 min_dist = min(
-                    math.hypot(pu.position[0] - ai_mallet.position[0],
-                               pu.position[1] - ai_mallet.position[1])
-                    for pu in powerup_manager.field_powerups
+                    math.hypot(s.position[0] - ai_mallet.position[0],
+                               s.position[1] - ai_mallet.position[1])
+                    for s in field_spheres
                 )
                 pu_obs[12] = min(min_dist / math.hypot(W, H), 1.0)
             else:
