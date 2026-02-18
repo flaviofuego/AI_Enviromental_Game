@@ -22,6 +22,11 @@ class KeyboardMallet(Mallet):
         if keys is None:
             keys = pygame.key.get_pressed()
 
+        # Paralysis: ignore all input, zero velocity
+        if self.paralyzed:
+            self.velocity = [0.0, 0.0]
+            return
+
         cfg = self.config
         self.prev_position = self.position.copy()
         speed = self.base_speed * self.speed_multiplier

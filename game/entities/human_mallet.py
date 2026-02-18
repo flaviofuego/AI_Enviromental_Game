@@ -13,6 +13,10 @@ class HumanMallet(Mallet):
     def update(self, mouse_pos=None):
         if mouse_pos is None:
             return
+        # Paralysis: ignore mouse movement, keep current position
+        if self.paralyzed:
+            self.velocity = [0.0, 0.0]
+            return
         cfg = self.config
         self.prev_position = self.position.copy()
         target_x = min(max(mouse_pos[0], self.radius), cfg.half_width - self.radius)

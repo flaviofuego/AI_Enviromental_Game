@@ -17,6 +17,11 @@ class AIMallet(Mallet):
 
     def update_simple_ai(self, puck_pos):
         """Simple tracking AI behavior (used when RL model is not available)."""
+        # Paralysis: freeze mallet
+        if self.paralyzed:
+            self.velocity = [0.0, 0.0]
+            return
+
         cfg = self.config
         self.prev_position = self.position.copy()
 
@@ -49,6 +54,11 @@ class AIMallet(Mallet):
         Actions: 0=Up, 1=Down, 2=Left, 3=Right, 4=Stay,
                  5=UpLeft, 6=UpRight, 7=DownLeft, 8=DownRight
         """
+        # Paralysis: force Stay regardless of chosen action
+        if self.paralyzed:
+            self.velocity = [0.0, 0.0]
+            return
+
         cfg = self.config
         self.prev_position = self.position.copy()
         diag = move_amount * 0.7071  # 1/sqrt(2) for diagonal normalization
