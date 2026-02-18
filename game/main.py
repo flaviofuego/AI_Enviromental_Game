@@ -11,14 +11,16 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from shared.config import GameConfig
+from shared.powerups import PowerUpManager
+from shared.powerups.registry import PowerUpRegistry
+from shared.powerups.definitions import register_all
 from game.core.game_engine import GameEngine
 from game.core.match_manager import MatchConfig, GameMode
-from game.entities.powerups import PowerUpManager
 from game.ui.hud import HUD
 
 
 def run_game(screen: pygame.Surface, match_config: MatchConfig = None,
-             save_system=None) -> str:
+             save_system=None, powerup_phases: list = None) -> str:
     """
     Run a single game match with the given configuration.
     Returns: 'exit', 'back_to_menu', 'retry', 'next_level'.
@@ -34,7 +36,12 @@ def run_game(screen: pygame.Surface, match_config: MatchConfig = None,
 
     # Attach power-up manager if enabled
     if match_config.powerups_enabled:
-        engine.powerup_manager = PowerUpManager(config)
+        registry = PowerUpRegistry()
+        register_all(registry)
+        engine.powerup_manager = PowerUpManager(
+            config, registry,
+            enabled_phases=powerup_phases if powerup_phases else None,
+        )
 
     return engine.run()
 
@@ -58,14 +65,20 @@ def main_with_config(screen=None, level_id=1, save_system=None, **kwargs):
     if level_config and isinstance(level_config, dict):
         level_id = level_config.get('level_id', level_id)
 
+    # Resolve powerup phases from level config
+    from game.config.level_config import get_level_config
+    lvl_cfg = get_level_config(level_id)
+    powerup_phases = lvl_cfg.get('powerup_phases', None)
+    powerups_enabled = bool(powerup_phases)
+
     match_config = MatchConfig(
         mode=GameMode.PLAYER_VS_AI,
         score_limit=7,
         level_id=level_id,
-        powerups_enabled=False,
+        powerups_enabled=powerups_enabled,
     )
 
-    return run_game(screen, match_config, save_system)
+    return run_game(screen, match_config, save_system, powerup_phases=powerup_phases)
 
 
 def main() -> None:
