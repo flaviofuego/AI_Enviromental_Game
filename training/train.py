@@ -69,14 +69,22 @@ _ALGORITHMS = {"PPO": PPO, "DQN": DQN}
 # Helpers
 # ═══════════════════════════════════════════════════════════════════
 
-def create_env(env_type: str = "base"):
-    """Create a single training environment."""
+def create_env(env_type: str = "base", powerup_phases: list[int] | None = None):
+    """Create a single training environment.
+
+    Parameters
+    ----------
+    env_type       : "base" | "powerups"
+    powerup_phases : list of phase ints (1-8) for the powerups env.
+                     Defaults to [1, 2, 3] when not specified.
+    """
     if env_type == "base":
         from training.envs.base_env import AirHockeyEnv
         return AirHockeyEnv()
     elif env_type == "powerups":
         from training.envs.powerups_env import AirHockeyWithPowerUpsEnv
-        return AirHockeyWithPowerUpsEnv()
+        phases = powerup_phases or [1, 2, 3]
+        return AirHockeyWithPowerUpsEnv(phases=phases)
     else:
         raise ValueError(f"Unknown env type: {env_type}. Available: base, powerups")
 

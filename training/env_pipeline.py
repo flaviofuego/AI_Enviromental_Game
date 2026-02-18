@@ -27,22 +27,38 @@ from stable_baselines3.common.vec_env import (
 from training.envs.observation_builder import ObservationBuilder
 
 
-def _create_base_env(env_type: str, obs_builder: ObservationBuilder | None = None):
-    """Create a single training environment instance."""
+def _create_base_env(
+    env_type: str,
+    obs_builder: ObservationBuilder | None = None,
+    powerup_phases: list[int] | None = None,
+):
+    """Create a single training environment instance.
+
+    Parameters
+    ----------
+    env_type       : "base" | "powerups"
+    obs_builder    : optional custom ObservationBuilder
+    powerup_phases : phases to enable (only used when env_type="powerups")
+    """
     if env_type == "base":
         from training.envs.base_env import AirHockeyEnv
         return AirHockeyEnv(obs_builder=obs_builder)
     elif env_type == "powerups":
         from training.envs.powerups_env import AirHockeyWithPowerUpsEnv
-        return AirHockeyWithPowerUpsEnv()
+        phases = powerup_phases or [1, 2, 3]
+        return AirHockeyWithPowerUpsEnv(phases=phases, obs_builder=obs_builder)
     else:
         raise ValueError(f"Unknown env type: {env_type}. Available: base, powerups")
 
 
-def _make_env_fn(env_type: str, obs_builder: ObservationBuilder | None = None) -> Callable:
+def _make_env_fn(
+    env_type: str,
+    obs_builder: ObservationBuilder | None = None,
+    powerup_phases: list[int] | None = None,
+) -> Callable:
     """Return a closure that creates a new env (for ``make_vec_env``)."""
     def _init():
-        return _create_base_env(env_type, obs_builder)
+        return _create_base_env(env_type, obs_builder, powerup_phases)
     return _init
 
 
@@ -60,14 +76,29 @@ def build_training_envs(
     env_type: str = "base",
     n_envs: int = 1,
     log_dir: str | None = None,
+    powerup_phases: list[int] | None = None,
 ) -> tuple[VecEnv | gym.Env, gym.Env]:
     """Build training and eval environments with the appropriate wrappers.
 
-    Returns:
-        (train_env, eval_env) — train_env is vectorized if ``n_envs > 1``
-        or if wrappers require it.
+    Parameters
+    ----------
+    config         : TrainingConfig / PPOConfig
+    env_type       : "base" | "powerups"
+    n_envs         : number of parallel vec envs
+    log_dir        : directory for Monitor logs
+    powerup_phases : list of phase ints (1-8) when env_type="powerups".
+                     Falls back to config.powerup_phases if present.
+
+    Returns
+    -------
+    (train_env, eval_env) — train_env is vectorized if ``n_envs > 1``
+    or if wrappers require it.
     """
     obs_builder = _resolve_obs_builder(config)
+
+    # Resolve powerup phases: argument > config attribute > default [1,2,3]
+    if powerup_phases is None:
+        powerup_phases = getattr(config, "powerup_phases", None)
 
     # Determine if we need a VecEnv (wrappers like VecNormalize require it)
     needs_vec = (
@@ -79,14 +110,14 @@ def build_training_envs(
     # ── Training env ─────────────────────────────────────────────
     if needs_vec:
         train_env = make_vec_env(
-            _make_env_fn(env_type, obs_builder),
+            _make_env_fn(env_type, obs_builder, powerup_phases),
             n_envs=max(n_envs, 1),
         )
     else:
-        train_env = DummyVecEnv([_make_env_fn(env_type, obs_builder)])
+        train_env = DummyVecEnv([_make_env_fn(env_type, obs_builder, powerup_phases)])
 
     # ── Eval env (always single, unwrapped for score access) ─────
-    eval_env_raw = _create_base_env(env_type, obs_builder)
+    eval_env_raw = _create_base_env(env_type, obs_builder, powerup_phases)
 
     # ── VecNormalize ─────────────────────────────────────────────
     if getattr(config, "use_vec_normalize", False):
