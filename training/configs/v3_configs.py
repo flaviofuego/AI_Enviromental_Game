@@ -53,6 +53,10 @@ class TrainingConfig(PPOConfig):
     # Extended observation (17D vs 13D)
     use_extended_obs: bool = False
 
+    # Powerup system configuration
+    powerup_phases: list[int] = field(default_factory=lambda: [1, 2, 3])
+    """Powerup phases to activate when env_type='powerups'. Default: phases 1-3."""
+
     # Policy kwargs extras
     ortho_init: bool = True
     normalize_advantage: bool = True
