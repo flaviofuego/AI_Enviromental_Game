@@ -10,6 +10,7 @@ from shared.config import GameConfig, COLORS
 from game.core.game_state import GameState
 from game.core.match_manager import MatchConfig
 from game.components.TimerDisplay import TimerDisplay, TimerMode
+from game.components.PowerUpHUDController import PowerUpHUDController
 
 
 # Climate change facts shown between goals
@@ -44,6 +45,10 @@ class HUD:
         # Timer display component (created without mode — configured on first draw)
         self._timer_display: Optional[TimerDisplay] = None
         self._timer_configured = False
+        # Powerup HUD controller (lazy-init; zero cost when powerups are off)
+        self._powerup_hud: Optional[PowerUpHUDController] = None
+        # Cached rect of the score bar for powerup layout anchoring
+        self._score_bar_rect: Optional[pygame.Rect] = None
 
     def _get_font(self, size: int) -> pygame.font.Font:
         if size not in self._fonts:
@@ -77,9 +82,11 @@ class HUD:
         # --- Level name ---
         self._draw_level_name(screen, level_config, W)
 
-        # --- Power-up indicators ---
-        if powerup_manager:
-            self._draw_powerup_indicators(screen, powerup_manager, W, H)
+        # --- Power-up timers (anchored to score bar) ---
+        if powerup_manager and self._score_bar_rect is not None:
+            if self._powerup_hud is None:
+                self._powerup_hud = PowerUpHUDController(font_size=15)
+            self._powerup_hud.draw(screen, powerup_manager, self._score_bar_rect, now)
 
         # --- Climate fact ---
         if self._show_fact and (now - self._fact_display_time) < 4.0:
@@ -151,6 +158,9 @@ class HUD:
         # Timer text
         screen.blit(timer_txt, (cx, y + (row_h - timer_txt.get_height()) // 2))
 
+        # Cache the score bar rect so powerup pills can anchor to it
+        self._score_bar_rect = bar_rect
+
     def _ensure_timer_display(self, match_config):
         """Lazy-init / reconfigure the TimerDisplay component."""
         if self._timer_display is None:
@@ -187,57 +197,13 @@ class HUD:
             txt = font.render(name, True, (180, 180, 180))
             screen.blit(txt, (10, 8))
 
+    # _draw_powerup_indicators has been replaced by PowerUpHUDController.
+    # The new system renders pills anchored to the score bar via
+    # self._powerup_hud.draw() called in HUD.draw().
+    # This stub is kept for backward-compat if any external code calls it.
     def _draw_powerup_indicators(self, screen, pm, W, H):
-        """Draw active power-up effect indicators for both players."""
-        from game.entities.powerups import POWERUP_CONFIG
-
-        font = self._get_font(16)
-        y_offset = H - 30
-
-        # Player 1 effects (left side)
-        p1_effects = pm.get_active_effects_for_player(0)
-        for i, effect in enumerate(p1_effects):
-            cfg = POWERUP_CONFIG[effect.type]
-            # Bar background
-            bar_w = 80
-            bar_h = 16
-            x = 10
-            y = y_offset - i * 22
-
-            bg = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-            bg.fill((0, 0, 0, 120))
-            screen.blit(bg, (x, y))
-
-            # Fill bar
-            fill_pct = effect.remaining / cfg["duration"]
-            fill_w = int(bar_w * fill_pct)
-            pygame.draw.rect(screen, cfg["color"], (x, y, fill_w, bar_h))
-            pygame.draw.rect(screen, COLORS.WHITE, (x, y, bar_w, bar_h), 1)
-
-            # Label
-            label = font.render(cfg["icon_char"], True, COLORS.WHITE)
-            screen.blit(label, (x + 2, y))
-
-        # Player 2 effects (right side)
-        p2_effects = pm.get_active_effects_for_player(1)
-        for i, effect in enumerate(p2_effects):
-            cfg = POWERUP_CONFIG[effect.type]
-            bar_w = 80
-            bar_h = 16
-            x = W - bar_w - 10
-            y = y_offset - i * 22
-
-            bg = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-            bg.fill((0, 0, 0, 120))
-            screen.blit(bg, (x, y))
-
-            fill_pct = effect.remaining / cfg["duration"]
-            fill_w = int(bar_w * fill_pct)
-            pygame.draw.rect(screen, cfg["color"], (x, y, fill_w, bar_h))
-            pygame.draw.rect(screen, COLORS.WHITE, (x, y, bar_w, bar_h), 1)
-
-            label = font.render(cfg["icon_char"], True, COLORS.WHITE)
-            screen.blit(label, (x + 2, y))
+        """Deprecated — use PowerUpHUDController via HUD.draw(powerup_manager=pm)."""
+        pass
 
     def _draw_climate_fact(self, screen, W, H, now):
         """Draw a climate fact at the bottom of the screen."""
