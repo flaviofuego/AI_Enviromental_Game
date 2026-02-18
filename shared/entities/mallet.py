@@ -48,6 +48,9 @@ class Mallet(pygame.sprite.Sprite):
         self._size_modifier: float = 1.0
         self._base_radius: int = self.radius
 
+        # Paralysis state — set by PowerUpManager._apply_paralysis()
+        self.paralyzed: bool = False
+
     # ------------------------------------------------------------------
     # Collision mask
     # ------------------------------------------------------------------
