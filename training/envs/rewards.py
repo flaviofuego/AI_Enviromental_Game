@@ -175,30 +175,17 @@ class GoalRewardComponent:
 class HitRewardComponent:
     """Reward for hitting the puck, scaled by shot quality.
 
-    - Base hit: +0.8
+    NOTE: `hit_base` was removed to prevent wall-bouncing exploit.
+    Only directionally-meaningful hits are rewarded:
     - Shot quality: +2.5 * alignment * speed_ratio (when aimed at goal)
     - Hard shot bonus: +0.5 when speed > 0.6 * max_speed
-    - Diminishing returns: consecutive hits without direction change
-      reduce base reward by 20% each (anti-exploit: "hit farming")
     """
 
     name = "hit"
-    _MAX_CONSECUTIVE_DISCOUNT = 5  # After 5 consecutive, base = ~0.8 * 0.8^5 ≈ 0.26
-
-    def __init__(self) -> None:
-        self._consecutive_hits = 0
 
     def calculate(self, state: FieldState, breakdown: RewardBreakdown) -> None:
         if not state.ai_hit_puck:
-            if state.steps_since_last_hit > 5:
-                self._consecutive_hits = 0
             return
-
-        # Diminishing base reward for consecutive hits (anti-exploit)
-        discount = 0.8 ** min(self._consecutive_hits, self._MAX_CONSECUTIVE_DISCOUNT)
-        base_reward = 0.8 * discount
-        breakdown.add("hit_base", base_reward, RewardCategory.HIT)
-        self._consecutive_hits += 1
 
         # Shot quality: alignment with opponent's goal (at x=0, y=H/2)
         goal_center = (0.0, state.height / 2.0)
@@ -219,7 +206,7 @@ class HitRewardComponent:
                     breakdown.add("hard_shot", 0.5, RewardCategory.HIT)
 
     def reset(self) -> None:
-        self._consecutive_hits = 0
+        pass
 
 
 # ─────────────────────────────────────────────────────────────────────
