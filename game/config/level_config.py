@@ -78,13 +78,15 @@ LEVELS = {
             }
         },
         "mechanics": {
-            "type": "uv_zones",
-            "zone_count": 2,           # Number of UV zones on field
-            "zone_radius": 60,         # Radius of each zone (px at 800x500)
-            "speed_boost": 1.3,        # Puck speed multiplier inside zone
-            "zone_move_speed": 0.5,    # How fast zones drift
-            "zone_pulse_rate": 2.0,    # Pulse animation speed (Hz)
+            "type": "none",  # UV zones desactivado — solo powerups
+            # "type": "uv_zones",
+            # "zone_count": 2,           # Number of UV zones on field
+            # "zone_radius": 60,         # Radius of each zone (px at 800x500)
+            # "speed_boost": 1.3,        # Puck speed multiplier inside zone
+            # "zone_move_speed": 0.5,    # How fast zones drift
+            # "zone_pulse_rate": 2.0,    # Pulse animation speed (Hz)
         },
+        "powerup_phases": [1, 2],      # speed_boost + shield
         "difficulty": 2,
         "ai_reaction_speed": 0.18,
         "ai_prediction_factor": 0.58,
@@ -108,12 +110,13 @@ LEVELS = {
             }
         },
         "mechanics": {
-            "type": "fog_of_war",
-            "player_vision_radius": 120,   # Clear area around player mallet
-            "puck_vision_radius": 80,      # Clear area around puck
-            "fog_opacity": 200,            # 0-255 fog darkness
-            "ai_sees_through": True,       # AI ignores fog (difficulty)
+            "type": "nonr",
+            #"player_vision_radius": 120,   # Clear area around player mallet
+            #"puck_vision_radius": 80,      # Clear area around puck
+            #"fog_opacity": 200,            # 0-255 fog darkness
+            #"ai_sees_through": True,       # AI ignores fog (difficulty)
         },
+        "powerup_phases": [1, 5],      # speed_boost + slow_opponent
         "difficulty": 3,
         "ai_reaction_speed": 0.25,
         "ai_prediction_factor": 0.65,
@@ -137,12 +140,14 @@ LEVELS = {
             }
         },
         "mechanics": {
-            "type": "shrinking_field",
-            "shrink_rate": 0.3,            # Pixels per second walls close in
-            "player_goal_expand": 15,      # Pixels walls push back per player goal
-            "ai_goal_shrink": 10,          # Extra shrink per AI goal
-            "min_field_ratio": 0.6,        # Minimum field size (60% of original)
+            "type": "none",  # shrinking_field desactivado — solo powerups
+            # "type": "shrinking_field",
+            # "shrink_rate": 0.3,            # Pixels per second walls close in
+            # "player_goal_expand": 15,      # Pixels walls push back per player goal
+            # "ai_goal_shrink": 10,          # Extra shrink per AI goal
+            # "min_field_ratio": 0.6,        # Minimum field size (60% of original)
         },
+        "powerup_phases": [3, 6],      # magnet + obstacle
         "difficulty": 4,
         "ai_reaction_speed": 0.40,
         "ai_prediction_factor": 0.80,
@@ -166,13 +171,15 @@ LEVELS = {
             }
         },
         "mechanics": {
-            "type": "heat_waves",
-            "wave_interval": 8.0,          # Seconds between heat waves
-            "wave_duration": 3.0,          # How long each wave lasts
-            "friction_reduction": 0.5,     # Multiply friction during wave (slippery)
-            "visual_distortion": True,     # Enable visual heat shimmer effect
-            "trail_enabled": True,         # Puck leaves heat trail
+            "type": "none",  # heat_waves desactivado — solo powerups
+            # "type": "heat_waves",
+            # "wave_interval": 8.0,          # Seconds between heat waves
+            # "wave_duration": 3.0,          # How long each wave lasts
+            # "friction_reduction": 0.5,     # Multiply friction during wave (slippery)
+            # "visual_distortion": True,     # Enable visual heat shimmer effect
+            # "trail_enabled": True,         # Puck leaves heat trail
         },
+        "powerup_phases": [7, 8],      # paralyze + invisibility
         "difficulty": 5,
         "ai_reaction_speed": 0.55,
         "ai_prediction_factor": 0.95,
