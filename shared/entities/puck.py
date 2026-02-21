@@ -193,6 +193,12 @@ class Puck(pygame.sprite.Sprite):
         self.velocity[0] += mallet.velocity[0] * 0.3
         self.velocity[1] += mallet.velocity[1] * 0.3
 
+        # Powerup strike boost: amplifies puck speed when this mallet hits
+        strike_mult = getattr(mallet, "strike_multiplier", 1.0)
+        if strike_mult != 1.0:
+            self.velocity[0] *= strike_mult
+            self.velocity[1] *= strike_mult
+
         # Edge guard
         W, H = self.config.width, self.config.height
         margin = 30

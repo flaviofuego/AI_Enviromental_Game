@@ -45,6 +45,7 @@ class Mallet(pygame.sprite.Sprite):
 
         # Power-up modifiers (1.0 = normal)
         self.speed_multiplier: float = 1.0
+        self.strike_multiplier: float = 1.0
         self._size_modifier: float = 1.0
         self._base_radius: int = self.radius
 
