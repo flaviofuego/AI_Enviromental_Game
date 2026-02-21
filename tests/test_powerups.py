@@ -47,6 +47,7 @@ def _make_pygame_stub():
         def fill(self, *a): pass
         def blit(self, *a): pass
         def set_alpha(self, *a): pass
+        def copy(self): return _Surface(self.size)
         def get_rect(self, **kw): return _Rect(0, 0, *self.size)
 
     # Rect stub
@@ -54,6 +55,8 @@ def _make_pygame_stub():
         def __init__(self, x=0, y=0, w=0, h=0):
             self.x = x; self.y = y; self.width = w; self.height = h
             self.center = (x + w // 2, y + h // 2)
+            self.centerx = self.center[0]
+            self.centery = self.center[1]
         def collidepoint(self, *a): return False
 
     # Sprite / Group stubs
@@ -87,6 +90,8 @@ def _make_pygame_stub():
     stub.draw = types.SimpleNamespace(
         circle=lambda *a, **k: None,
         rect=lambda *a, **k: None,
+        polygon=lambda *a, **k: None,
+        line=lambda *a, **k: None,
     )
     stub.transform = types.SimpleNamespace(
         smoothscale=lambda s, size: s,
@@ -150,6 +155,7 @@ class _Player:
         self.velocity       = [0.0, 0.0]
         self.radius         = 30
         self.speed_multiplier = 1.0
+        self.strike_multiplier = 1.0
         self.paralyzed      = False
 
 
@@ -200,7 +206,7 @@ def _make_speed_effect(registry, mult_override=None, target=0, collector=0) -> A
     if mult_override is not None:
         # Override via numeric_contributions (the proper channel)
         defn = type(defn)(
-            **{**defn.__dict__, "numeric_contributions": {"speed_mult": mult_override}}
+            **{**defn.__dict__, "numeric_contributions": {"strike_mult": mult_override}}
         )
         eff.definition = defn
     return eff
@@ -218,7 +224,7 @@ class TestEffectStack:
         stack = EffectStack()
         stack.add(_make_speed_effect(self.reg))
         # 1.0 base × 1.3 multiplier (from config)
-        mult = stack.get_speed_multiplier()
+        mult = stack.get_strike_multiplier()
         assert mult == pytest.approx(1.3, rel=1e-3)
 
     def test_speed_accumulation_two_instances(self):
@@ -226,7 +232,7 @@ class TestEffectStack:
         stack = EffectStack()
         stack.add(_make_speed_effect(self.reg))
         stack.add(_make_speed_effect(self.reg))
-        mult = stack.get_speed_multiplier()
+        mult = stack.get_strike_multiplier()
         assert mult == pytest.approx(1.3 * 1.3, rel=1e-3)
 
     def test_speed_cap_max(self):
@@ -234,7 +240,7 @@ class TestEffectStack:
         stack = EffectStack()
         for _ in range(20):
             stack.add(_make_speed_effect(self.reg))
-        assert stack.get_speed_multiplier() == pytest.approx(SPEED_MAX_CAP)
+        assert stack.get_strike_multiplier() == pytest.approx(SPEED_MAX_CAP)
 
     def test_slow_effect_caps_at_minimum(self):
         """Multiple slow_opponent effects can't push speed below SPEED_MIN_CAP."""
@@ -274,18 +280,18 @@ class TestEffectStack:
     def test_duplication_doubles_speed(self):
         stack = EffectStack()
         stack.add(_make_speed_effect(self.reg))
-        base_mult = stack.get_speed_multiplier()   # 1.3
+        base_mult = stack.get_strike_multiplier()   # 1.3
         stack.apply_stacked_multiplier(2.0)         # Duplication
-        new_mult = stack.get_speed_multiplier()     # 1.3 × 2.0 = 2.6
+        new_mult = stack.get_strike_multiplier()     # 1.3 × 2.0 = 2.6
         assert new_mult == pytest.approx(base_mult * 2.0, rel=1e-3)
 
     def test_duplication_revert(self):
         stack = EffectStack()
         stack.add(_make_speed_effect(self.reg))
-        base_mult = stack.get_speed_multiplier()
+        base_mult = stack.get_strike_multiplier()
         stack.apply_stacked_multiplier(2.0)
         stack.apply_stacked_multiplier(0.5)   # revert
-        assert stack.get_speed_multiplier() == pytest.approx(base_mult, rel=1e-3)
+        assert stack.get_strike_multiplier() == pytest.approx(base_mult, rel=1e-3)
 
     def test_tick_decrements_remaining(self):
         stack = EffectStack()
@@ -386,8 +392,8 @@ class TestSpeedBoost:
     def setup_method(self):
         self.reg = _make_registry()
 
-    def test_speed_multiplier_applied_after_activate(self):
-        """After manager activates speed_boost, player.speed_multiplier > 1."""
+    def test_strike_multiplier_applied_after_activate(self):
+        """After manager activates speed_boost, player.strike_multiplier > 1."""
         cfg     = _Config()
         manager = PowerUpManager(cfg, self.reg, enabled_phases=[1])
         state   = _State()
@@ -398,11 +404,12 @@ class TestSpeedBoost:
         sphere = FieldSphere(self.reg.get("speed_boost"), 200, 250, 800, 500)
         manager.field_spheres.append(sphere)
         manager.update(0.016, [player, opponent], puck, state)
-        # Speed should now be > 1.0
-        assert player.speed_multiplier > 1.0
+        # Strike should now be > 1.0 while movement speed remains unchanged.
+        assert player.strike_multiplier > 1.0
+        assert player.speed_multiplier == pytest.approx(1.0)
 
-    def test_speed_expires_correctly(self):
-        """After all speed effects expire, speed_multiplier returns to 1.0."""
+    def test_strike_expires_correctly(self):
+        """After all speed effects expire, strike_multiplier returns to 1.0."""
         manager = PowerUpManager(_Config(), self.reg, enabled_phases=[1])
         state   = _State()
         player  = _Player(200, 250)
@@ -412,11 +419,11 @@ class TestSpeedBoost:
         defn = self.reg.get("speed_boost")
         eff  = ActiveEffect(defn, remaining=0.001, collector_idx=0, target_idx=0)
         manager.stacks[0].add(eff)
-        manager._apply_speed([player, opponent])
-        assert player.speed_multiplier > 1.0
+        manager._apply_player_modifiers([player, opponent])
+        assert player.strike_multiplier > 1.0
         # Advance beyond duration
         manager.update(0.1, [player, opponent], puck, state)
-        assert player.speed_multiplier == pytest.approx(1.0, abs=0.01)
+        assert player.strike_multiplier == pytest.approx(1.0, abs=0.01)
 
 
 # ============================================================
@@ -535,14 +542,14 @@ class TestDuplication:
         defn_speed = self.reg.get("speed_boost")
         eff_speed  = ActiveEffect(defn_speed, remaining=10.0, collector_idx=0, target_idx=0)
         manager.stacks[0].add(eff_speed)
-        speed_before = manager.stacks[0].get_speed_multiplier()
+        speed_before = manager.stacks[0].get_strike_multiplier()
 
         # Now trigger duplication on collector 0
         state.stacks = manager.stacks
         defn_dup = self.reg.get("duplication")
         defn_dup.on_collect(0, [player, opponent], puck, state)
 
-        speed_after = manager.stacks[0].get_speed_multiplier()
+        speed_after = manager.stacks[0].get_strike_multiplier()
         assert speed_after == pytest.approx(speed_before * 2.0, rel=1e-3)
 
     def test_duplication_reverts_on_expire(self):
@@ -555,14 +562,14 @@ class TestDuplication:
         defn_speed = self.reg.get("speed_boost")
         eff_speed  = ActiveEffect(defn_speed, remaining=10.0, collector_idx=0, target_idx=0)
         manager.stacks[0].add(eff_speed)
-        base = manager.stacks[0].get_speed_multiplier()
+        base = manager.stacks[0].get_strike_multiplier()
 
         state.stacks = manager.stacks
         defn_dup = self.reg.get("duplication")
         defn_dup.on_collect(0, [player, opponent], puck, state)  # double
         defn_dup.on_expire(0, [player, opponent], puck, state)   # revert
 
-        reverted = manager.stacks[0].get_speed_multiplier()
+        reverted = manager.stacks[0].get_strike_multiplier()
         assert reverted == pytest.approx(base, rel=1e-3)
 
 
@@ -801,9 +808,11 @@ class TestPowerUpManagerIntegration:
         self.manager.field_spheres.append(
             FieldSphere(defn, 400, 250, 800, 500)
         )
-        self.manager.reset()
+        self.state.obstacles = [{"x": 1.0, "y": 1.0, "radius": 20, "alpha": 255, "fading": False}]
+        self.manager.reset(self.state)
         assert len(self.manager.stacks[0]) == 0
         assert len(self.manager.field_spheres) == 0
+        assert len(self.state.obstacles) == 0
 
     def test_no_simultaneous_sphere_overcount(self):
         """PowerUpManager._spawn_logic must not exceed MAX_POWERUPS_ON_FIELD."""
