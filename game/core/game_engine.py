@@ -736,7 +736,7 @@ class GameEngine:
         self.state.timer.start()
         self.steps_since_ai_hit = 0
         if self.powerup_manager:
-            self.powerup_manager.reset()
+            self.powerup_manager.reset(self.state)
         # Re-create mechanic for fresh state
         if self.mechanic:
             self.mechanic = create_mechanic(self.config, self.level_config)
