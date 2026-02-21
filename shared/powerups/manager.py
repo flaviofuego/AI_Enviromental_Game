@@ -7,7 +7,7 @@ Responsibilities (Single Responsibility per method):
     _activate           — create ActiveEffect + call on_collect + emit events
     _tick_active        — advance timers; call on_tick for each active effect
     _expire_effects     — call on_expire + remove from EffectStack
-    _apply_speed        — read EffectStack and push speed_multiplier to players
+    _apply_player_modifiers — read EffectStack and push movement/strike multipliers
     _apply_paralysis    — freeze mallet if stack.is_paralyzed()
 
 The manager is framework-agnostic: it works in game and training contexts alike.
@@ -230,7 +230,7 @@ class PowerUpManager:
         self._advance_timers(dt)
         self._tick_active(dt, players, puck, state)
         events += self._do_expire_pass(players, puck, state)
-        self._apply_speed(players)
+        self._apply_player_modifiers(players)
         self._apply_paralysis(players)
 
         return events
@@ -418,12 +418,15 @@ class PowerUpManager:
 
     # --- Speed application -----------------------------------------------
 
-    def _apply_speed(self, players: list) -> None:
-        """Push EffectStack speed multiplier to each player entity."""
+    def _apply_player_modifiers(self, players: list) -> None:
+        """Push EffectStack movement and strike multipliers to each player."""
         for i, player in enumerate(players):
-            mult = self.stacks[i].get_speed_multiplier()
+            speed_mult = self.stacks[i].get_speed_multiplier()
+            strike_mult = self.stacks[i].get_strike_multiplier()
             if hasattr(player, "speed_multiplier"):
-                player.speed_multiplier = mult
+                player.speed_multiplier = speed_mult
+            if hasattr(player, "strike_multiplier"):
+                player.strike_multiplier = strike_mult
 
     # --- Paralysis enforcement -------------------------------------------
 
@@ -446,11 +449,17 @@ class PowerUpManager:
 
     # --- Reset -----------------------------------------------------------
 
-    def reset(self) -> None:
+    def reset(self, state: Any | None = None) -> None:
         """Clear all state (call when a new match begins)."""
         for stack in self.stacks:
             stack.clear()
         self.field_spheres.clear()
+        if state is not None:
+            if hasattr(state, "obstacles"):
+                state.obstacles.clear()
+            if hasattr(state, "player_invisible"):
+                state.player_invisible = [False, False]
+            state.stacks = self.stacks
         self._spawn_timer   = 0.0
         self._next_spawn_at = random.uniform(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_MAX)
         logger.debug("PowerUpManager reset")

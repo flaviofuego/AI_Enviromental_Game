@@ -36,6 +36,7 @@ MAGNET_FORCE_CAP = 2.0    # phase-3 + duplication cap
 # keys absent from the table are returned unclamped.
 _MULTIPLIER_CAPS: dict = {
     "speed_mult": (SPEED_MIN_CAP, SPEED_MAX_CAP),
+    "strike_mult": (1.0, SPEED_MAX_CAP),
     "size_mult":  (SIZE_MIN_CAP,  SIZE_MAX_CAP),
 }
 _TOTAL_CAPS: dict = {
@@ -188,6 +189,10 @@ class EffectStack:
     def get_size_multiplier(self) -> float:
         """Product of all size-affecting multipliers (clamped)."""
         return self.get_multiplier("size_mult")
+
+    def get_strike_multiplier(self) -> float:
+        """Product of all hit-force multipliers applied to puck impacts."""
+        return self.get_multiplier("strike_mult")
 
     def get_magnet_force(self) -> float:
         """Sum of all magnet attraction forces (clamped)."""
